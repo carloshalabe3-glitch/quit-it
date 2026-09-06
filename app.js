@@ -23,7 +23,43 @@
 
   var FALLBACK_ACTIVITY = 'Take five slow, deep breaths';
 
-  var ICON_OPTIONS = ['', '●', '■', '▲', '▼', '◆', '○', '□', '△', '▽', '◇', '★', '☆', '✕', '+'];
+  var ICON_OPTIONS = ['', 'quit', 'cigarette', 'phone', 'food', 'drink', 'dice', 'controller', 'moon', 'sugar', 'pill', 'bag', 'clock', 'coffee', 'flame'];
+
+  var ICON_SVGS = {
+    quit: '<circle cx="12" cy="12" r="9"/><line x1="5.5" y1="18.5" x2="18.5" y2="5.5"/>',
+    cigarette: '<rect x="2" y="14" width="14" height="4" rx="1"/><rect x="16" y="14" width="3" height="4" fill="currentColor" stroke="none"/><path d="M13 9c1-1 1-2 0-3M17 9c1-1 1-2 0-3"/>',
+    phone: '<rect x="7" y="2" width="10" height="20" rx="2"/><line x1="10" y1="18" x2="14" y2="18"/>',
+    food: '<path d="M6 2v8M4 2v4a2 2 0 004 0V2M6 10v12"/><path d="M18 2c-2 0-3 2-3 5s1 4 3 4v11"/>',
+    drink: '<path d="M8 2h8l-1 7a3 3 0 01-6 0z"/><line x1="12" y1="15" x2="12" y2="21"/><line x1="8" y1="21" x2="16" y2="21"/>',
+    dice: '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.1" fill="currentColor" stroke="none"/><circle cx="16" cy="8" r="1.1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.1" fill="currentColor" stroke="none"/><circle cx="8" cy="16" r="1.1" fill="currentColor" stroke="none"/><circle cx="16" cy="16" r="1.1" fill="currentColor" stroke="none"/>',
+    controller: '<rect x="2" y="8" width="20" height="10" rx="5"/><line x1="7" y1="11" x2="7" y2="15"/><line x1="5" y1="13" x2="9" y2="13"/><circle cx="16" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="18" cy="14" r="1" fill="currentColor" stroke="none"/>',
+    moon: '<path d="M20 14.5A8.5 8.5 0 119.5 4a7 7 0 1010.5 10.5z"/>',
+    sugar: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.2"/><circle cx="8" cy="7" r=".9" fill="currentColor" stroke="none"/><circle cx="16.5" cy="8" r=".9" fill="currentColor" stroke="none"/><circle cx="8.5" cy="17" r=".9" fill="currentColor" stroke="none"/>',
+    pill: '<rect x="4" y="9" width="16" height="6" rx="3" transform="rotate(45 12 12)"/><line x1="12" y1="6.5" x2="12" y2="17.5" transform="rotate(45 12 12)"/>',
+    bag: '<path d="M6 8h12l-1 12H7z"/><path d="M9 8V6a3 3 0 016 0v2"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><line x1="12" y1="12" x2="12" y2="7"/><line x1="12" y1="12" x2="16" y2="14"/>',
+    coffee: '<path d="M4 8h13v6a5 5 0 01-5 5H9a5 5 0 01-5-5z"/><path d="M17 9h2a2 2 0 010 4h-2"/><path d="M8 4c0 1-1 1-1 2M12 4c0 1-1 1-1 2"/>',
+    flame: '<path d="M12 2c1 3-2 4-2 7a4 4 0 108 0c0-2-1-3-2-4 1 3-1 4-2 4-1.5 0-2-2-2-3 0-2 1-3 0-4z"/>'
+  };
+
+  function iconMarkup(key) {
+    var inner = ICON_SVGS[key];
+    if (!inner) return null;
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + inner + '</svg>';
+  }
+
+  function makeIconEl(key, cls) {
+    var span = document.createElement('span');
+    span.className = cls || 'habit-emoji';
+    var markup = iconMarkup(key);
+    if (markup) {
+      span.innerHTML = markup;
+      span.classList.add('habit-icon-svg');
+    } else {
+      span.textContent = key;
+    }
+    return span;
+  }
 
   var MILESTONES = [
     { key: '1d', ms: 1 * 86400000, title: '1 day clean' },
@@ -418,7 +454,7 @@
 
       var top = el('div', 'habit-card-top');
       var nameRow = el('div', 'habit-name-row');
-      if (habit.emoji) nameRow.appendChild(el('span', 'habit-emoji', habit.emoji));
+      if (habit.emoji) nameRow.appendChild(makeIconEl(habit.emoji, 'habit-emoji'));
       nameRow.appendChild(document.createTextNode(habit.name));
       top.appendChild(nameRow);
       var bestEl = el('span', 'habit-best', 'best ' + formatDays(bestStreakMs(habit)) + 'd');
@@ -456,7 +492,7 @@
 
     document.getElementById('detailName').innerHTML = '';
     var nameHost = document.getElementById('detailName');
-    if (habit.emoji) nameHost.appendChild(el('span', 'habit-emoji', habit.emoji + ' '));
+    if (habit.emoji) nameHost.appendChild(makeIconEl(habit.emoji, 'habit-emoji'));
     nameHost.appendChild(document.createTextNode(habit.name));
 
     var cur = currentStreakMs(habit);
@@ -541,7 +577,11 @@
     list.forEach(function (habit) {
       var row = el('div', 'overview-row');
       var name = el('div', 'overview-row-name');
-      if (habit.emoji) name.appendChild(el('span', 'habit-emoji', habit.emoji + ' '));
+      if (habit.emoji) {
+        var ovIcon = makeIconEl(habit.emoji, 'habit-emoji');
+        ovIcon.style.marginRight = '0.4em';
+        name.appendChild(ovIcon);
+      }
       name.appendChild(document.createTextNode(habit.name));
       var num = el('div', 'overview-row-num', formatDays(currentStreakMs(habit)) + 'd current · ' + habit.relapses.length + ' relapses');
       row.appendChild(name);
@@ -561,7 +601,11 @@
       archived.forEach(function (habit) {
         var row = el('div', 'overview-row');
         var archName = el('div', 'overview-row-name');
-        if (habit.emoji) archName.appendChild(el('span', 'habit-emoji', habit.emoji + ' '));
+        if (habit.emoji) {
+          var archIcon = makeIconEl(habit.emoji, 'habit-emoji');
+          archIcon.style.marginRight = '0.4em';
+          archName.appendChild(archIcon);
+        }
         archName.appendChild(document.createTextNode(habit.name));
         row.appendChild(archName);
         var restoreBtn = el('button', 'btn', 'Restore');
@@ -603,9 +647,14 @@
     var grid = document.getElementById('emojiGrid');
     grid.innerHTML = '';
     ICON_OPTIONS.forEach(function (em) {
-      var opt = el('button', 'emoji-opt', em || '—');
+      var opt = el('button', 'emoji-opt');
       opt.type = 'button';
-      if (!em) opt.classList.add('emoji-opt-blank');
+      if (!em) {
+        opt.classList.add('emoji-opt-blank');
+        opt.textContent = '—';
+      } else {
+        opt.innerHTML = iconMarkup(em) || '';
+      }
       if (em === state.selectedEmoji) opt.classList.add('selected');
       opt.addEventListener('click', function () {
         state.selectedEmoji = em;

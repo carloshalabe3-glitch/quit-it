@@ -304,6 +304,8 @@ input, textarea, select {
 }
 
 .habit-emoji { font-size: 1.2rem; color: var(--yellow-deep); }
+.habit-icon-svg { display: inline-flex; vertical-align: middle; }
+.habit-icon-svg svg { width: 1em; height: 1em; display: block; }
 
 .habit-best {
   font-size: 0.8rem;
@@ -652,7 +654,12 @@ input, textarea, select {
   padding: 0.5rem 0;
   cursor: pointer;
   color: var(--yellow-deep);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
+
+.emoji-opt svg { width: 1.15em; height: 1.15em; }
 
 .emoji-opt.selected { border-color: var(--yellow); background: #FBF0D0; }
 .emoji-opt-blank { color: var(--ink-soft); }
