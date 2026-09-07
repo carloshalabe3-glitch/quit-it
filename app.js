@@ -436,17 +436,13 @@
     var list = activeHabits();
     var listEl = document.getElementById('habitList');
     var emptyEl = document.getElementById('emptyState');
-    var totalStrip = document.getElementById('totalStrip');
     listEl.innerHTML = '';
 
     if (list.length === 0) {
       emptyEl.classList.remove('hidden');
-      totalStrip.classList.add('hidden');
       return;
     }
     emptyEl.classList.add('hidden');
-    totalStrip.classList.remove('hidden');
-    document.getElementById('totalDaysNum').textContent = totalCleanDays();
 
     list.forEach(function (habit) {
       var card = el('button', 'habit-card');
@@ -474,12 +470,6 @@
       listEl.appendChild(card);
       homeRefs[habit.id] = { numEl: numEl, unitEl: unitEl, bestEl: bestEl };
     });
-  }
-
-  function totalCleanDays() {
-    var totalMs = 0;
-    activeHabits().forEach(function (h) { totalMs += currentStreakMs(h); });
-    return Math.floor(totalMs / 86400000);
   }
 
   // ---------- detail ----------
@@ -569,7 +559,6 @@
   // ---------- overview ----------
 
   function renderOverview() {
-    document.getElementById('overviewTotalNum').textContent = totalCleanDays();
     var host = document.getElementById('overviewList');
     host.innerHTML = '';
 
@@ -1025,7 +1014,6 @@
         ref.unitEl.textContent = parts.unit + ' clean';
         ref.bestEl.textContent = 'best ' + formatDays(bestStreakMs(habit)) + 'd';
       });
-      document.getElementById('totalDaysNum').textContent = totalCleanDays();
     } else if (state.screen === 'detail' && detailRefs) {
       var h = findHabit(detailRefs.habitId);
       if (h) {

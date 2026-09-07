@@ -1,4 +1,4 @@
-var CACHE_NAME = 'quit-it-v3';
+var CACHE_NAME = 'quit-it-v4';
 var ASSETS = [
   './',
   './index.html',
