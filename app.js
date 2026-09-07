@@ -72,6 +72,28 @@
     { key: '1y', ms: 365 * 86400000, title: '1 year clean' }
   ];
 
+  var QUOTES = [
+    { text: 'It does not matter how slowly you go as long as you do not stop.', author: 'Confucius' },
+    { text: 'Fall seven times, stand up eight.', author: 'Japanese proverb' },
+    { text: "Nothing is impossible, the word itself says 'I'm possible'!", author: 'Audrey Hepburn' },
+    { text: "It's not that I'm so smart, it's just that I stay with problems longer.", author: 'Albert Einstein' },
+    { text: 'The successful warrior is the average man, with laser-like focus.', author: 'Bruce Lee' },
+    { text: 'I’ve failed over and over and over again in my life. And that is why I succeed.', author: 'Michael Jordan' },
+    { text: 'The only way to do great work is to love what you do.', author: 'Steve Jobs' },
+    { text: 'You have power over your mind — not outside events. Realize this, and you will find strength.', author: 'Marcus Aurelius' },
+    { text: 'It always seems impossible until it’s done.', author: 'Nelson Mandela' },
+    { text: 'Turn your wounds into wisdom.', author: 'Oprah Winfrey' },
+    { text: 'You cannot swim for new horizons until you have courage to lose sight of the shore.', author: 'William Faulkner' },
+    { text: 'Strength does not come from winning. Your struggles develop your strengths.', author: 'Arnold Schwarzenegger' }
+  ];
+
+  function todaysQuote() {
+    var now = new Date();
+    var start = new Date(now.getFullYear(), 0, 0);
+    var dayOfYear = Math.floor((now - start) / 86400000);
+    return QUOTES[dayOfYear % QUOTES.length];
+  }
+
   // ---------- storage ----------
 
   function freshData() {
@@ -433,6 +455,9 @@
 
   function renderHome() {
     homeRefs = {};
+    var quote = todaysQuote();
+    document.getElementById('quoteText').textContent = '“' + quote.text + '”';
+    document.getElementById('quoteAuthor').textContent = '— ' + quote.author;
     var list = activeHabits();
     var listEl = document.getElementById('habitList');
     var emptyEl = document.getElementById('emptyState');
