@@ -97,7 +97,7 @@
   // ---------- storage ----------
 
   function freshData() {
-    return { pinHash: null, habits: [], customActivities: [], removedDefaults: [] };
+    return { pinHash: null, habits: [], customActivities: [], removedDefaults: [], viewMode: 'list' };
   }
 
   function normalizeHabit(h) {
@@ -119,7 +119,8 @@
       pinHash: typeof parsed.pinHash === 'string' ? parsed.pinHash : null,
       habits: Array.isArray(parsed.habits) ? parsed.habits.map(normalizeHabit) : [],
       customActivities: Array.isArray(parsed.customActivities) ? parsed.customActivities.filter(function (a) { return typeof a === 'string'; }) : [],
-      removedDefaults: Array.isArray(parsed.removedDefaults) ? parsed.removedDefaults.filter(function (a) { return typeof a === 'string'; }) : []
+      removedDefaults: Array.isArray(parsed.removedDefaults) ? parsed.removedDefaults.filter(function (a) { return typeof a === 'string'; }) : [],
+      viewMode: parsed.viewMode === 'grid' ? 'grid' : 'list'
     };
   }
 
@@ -462,6 +463,8 @@
     var listEl = document.getElementById('habitList');
     var emptyEl = document.getElementById('emptyState');
     listEl.innerHTML = '';
+    listEl.classList.toggle('grid-mode', data.viewMode === 'grid');
+    document.getElementById('viewToggleBtn').textContent = data.viewMode === 'grid' ? 'List' : 'Grid';
 
     if (list.length === 0) {
       emptyEl.classList.remove('hidden');
@@ -1100,6 +1103,11 @@
     document.getElementById('addHabitFab').addEventListener('click', function () { openHabitSheet(null); });
     document.getElementById('emptyAddBtn').addEventListener('click', function () { openHabitSheet(null); });
     document.getElementById('overviewBtn').addEventListener('click', function () { goToScreen('overview'); });
+    document.getElementById('viewToggleBtn').addEventListener('click', function () {
+      data.viewMode = data.viewMode === 'grid' ? 'list' : 'grid';
+      saveData();
+      renderHome();
+    });
     document.getElementById('lockNowBtn').addEventListener('click', relock);
 
     // detail

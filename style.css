@@ -340,6 +340,32 @@ input, textarea, select {
 
 .habit-card-actions .btn { flex: 1; padding: 0.65rem 0.5rem; font-size: 0.9rem; }
 
+/* ---------- Grid view ---------- */
+
+.habit-list.grid-mode {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.habit-list.grid-mode .habit-card {
+  padding: 1rem 0.9rem;
+  border-right: 1px solid #E4E2D8;
+}
+
+.habit-list.grid-mode .habit-card:nth-child(2n) { border-right: none; }
+
+.habit-list.grid-mode .habit-card-top {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+  margin-bottom: 0.55rem;
+}
+
+.habit-list.grid-mode .habit-name-row { font-size: 0.88rem; }
+.habit-list.grid-mode .habit-best { font-size: 0.7rem; }
+.habit-list.grid-mode .habit-streak-num { font-size: 1.9rem; }
+.habit-list.grid-mode .habit-streak-unit { font-size: 0.78rem; }
+
 .empty-state {
   padding: 3rem 1.5rem;
   text-align: center;
