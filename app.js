@@ -258,7 +258,8 @@
     selectedEmoji: '',
     confirmCallback: null,
     triggerText: '',
-    milestoneQueue: []
+    milestoneQueue: [],
+    calendarOffset: 0
   };
 
   var screens = ['lockScreen', 'setupScreen', 'homeScreen', 'detailScreen', 'overviewScreen', 'triggerScreen'];
@@ -443,7 +444,10 @@
 
   function goToScreen(name, habitId) {
     state.screen = name;
-    if (habitId) state.currentHabitId = habitId;
+    if (habitId) {
+      if (habitId !== state.currentHabitId) state.calendarOffset = 0;
+      state.currentHabitId = habitId;
+    }
     if (name === 'home') { renderHome(); showScreenEl('homeScreen'); }
     else if (name === 'detail') { renderDetail(state.currentHabitId); showScreenEl('detailScreen'); }
     else if (name === 'overview') { renderOverview(); showScreenEl('overviewScreen'); }
@@ -530,7 +534,53 @@
       bestEl: document.getElementById('detailBest')
     };
 
+    renderCalendar(habit);
     renderHistory(habit);
+  }
+
+  function renderCalendar(habit) {
+    var now = new Date();
+    var viewDate = new Date(now.getFullYear(), now.getMonth() + state.calendarOffset, 1);
+    var year = viewDate.getFullYear();
+    var month = viewDate.getMonth();
+
+    document.getElementById('calMonthLabel').textContent = viewDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+
+    var relapseDays = {};
+    habit.relapses.forEach(function (ts) {
+      var d = new Date(ts);
+      relapseDays[d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate()] = true;
+    });
+
+    var grid = document.getElementById('calGrid');
+    grid.innerHTML = '';
+    var firstDayOfWeek = new Date(year, month, 1).getDay();
+    var daysInMonth = new Date(year, month + 1, 0).getDate();
+    var createdDate = new Date(habit.createdAt);
+    createdDate.setHours(0, 0, 0, 0);
+    var todayDate = new Date();
+    todayDate.setHours(0, 0, 0, 0);
+
+    for (var i = 0; i < firstDayOfWeek; i++) {
+      grid.appendChild(el('div', 'cal-cell cal-blank'));
+    }
+    for (var day = 1; day <= daysInMonth; day++) {
+      var cellDate = new Date(year, month, day);
+      var cell = el('div', 'cal-cell', String(day));
+      var key = year + '-' + month + '-' + day;
+      if (cellDate.getTime() === todayDate.getTime()) cell.classList.add('today');
+      if (cellDate < createdDate) {
+        cell.classList.add('dim');
+      } else if (relapseDays[key]) {
+        cell.classList.add('event');
+      }
+      grid.appendChild(cell);
+    }
+
+    var createdMonthStart = new Date(createdDate.getFullYear(), createdDate.getMonth(), 1);
+    var currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    document.getElementById('calPrevBtn').disabled = viewDate.getTime() <= createdMonthStart.getTime();
+    document.getElementById('calNextBtn').disabled = viewDate.getTime() >= currentMonthStart.getTime();
   }
 
   function renderHistory(habit) {
@@ -1089,6 +1139,14 @@
     document.getElementById('detailBackBtn').addEventListener('click', function () { goToScreen('home'); });
     document.getElementById('detailEditBtn').addEventListener('click', function () { openHabitSheet(state.currentHabitId); });
     document.getElementById('logRelapseBtn').addEventListener('click', function () { logRelapse(state.currentHabitId); });
+    document.getElementById('calPrevBtn').addEventListener('click', function () {
+      state.calendarOffset -= 1;
+      renderCalendar(findHabit(state.currentHabitId));
+    });
+    document.getElementById('calNextBtn').addEventListener('click', function () {
+      state.calendarOffset += 1;
+      renderCalendar(findHabit(state.currentHabitId));
+    });
     document.getElementById('setLastTimeBtn').addEventListener('click', function () { openLastRelapseSheet(state.currentHabitId); });
     document.getElementById('lastRelapseCancel').addEventListener('click', closeLastRelapseSheet);
     document.getElementById('lastRelapseSave').addEventListener('click', saveLastRelapseSheet);
