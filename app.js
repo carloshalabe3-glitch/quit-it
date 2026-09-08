@@ -84,7 +84,8 @@
     { text: 'It always seems impossible until it’s done.', author: 'Nelson Mandela' },
     { text: 'Turn your wounds into wisdom.', author: 'Oprah Winfrey' },
     { text: 'You cannot swim for new horizons until you have courage to lose sight of the shore.', author: 'William Faulkner' },
-    { text: 'Strength does not come from winning. Your struggles develop your strengths.', author: 'Arnold Schwarzenegger' }
+    { text: 'Strength does not come from winning. Your struggles develop your strengths.', author: 'Arnold Schwarzenegger' },
+    { text: "Whether you think you can or you think you can't, you're right.", author: 'Henry Ford' }
   ];
 
   function todaysQuote() {
