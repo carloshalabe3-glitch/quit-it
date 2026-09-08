@@ -100,6 +100,10 @@
     return { pinHash: null, habits: [], customActivities: [], removedDefaults: [], viewMode: 'list' };
   }
 
+  function normalizeCustomMilestone(m) {
+    return { id: m.id || uid(), days: m.days, label: typeof m.label === 'string' ? m.label : '' };
+  }
+
   function normalizeHabit(h) {
     return {
       id: h.id || uid(),
@@ -109,8 +113,19 @@
       lastRelapseAt: typeof h.lastRelapseAt === 'number' ? h.lastRelapseAt : null,
       relapses: Array.isArray(h.relapses) ? h.relapses.filter(function (t) { return typeof t === 'number'; }) : [],
       archived: !!h.archived,
-      milestonesHit: Array.isArray(h.milestonesHit) ? h.milestonesHit : []
+      milestonesHit: Array.isArray(h.milestonesHit) ? h.milestonesHit : [],
+      customMilestones: Array.isArray(h.customMilestones) ? h.customMilestones.filter(function (m) { return m && typeof m.days === 'number' && m.days > 0; }).map(normalizeCustomMilestone) : []
     };
+  }
+
+  function milestoneDefaultTitle(days) {
+    return (days === 1 ? '1 day clean' : days + ' days clean');
+  }
+
+  function habitMilestones(habit) {
+    return MILESTONES.concat(habit.customMilestones.map(function (m) {
+      return { key: 'custom_' + m.id, ms: m.days * 86400000, title: m.label || milestoneDefaultTitle(m.days) };
+    }));
   }
 
   function normalizeData(parsed) {
@@ -536,6 +551,7 @@
 
     renderCalendar(habit);
     renderHistory(habit);
+    renderMilestoneList(habit);
   }
 
   function renderCalendar(habit) {
@@ -606,6 +622,108 @@
       });
       row.appendChild(rm);
       host.appendChild(row);
+    });
+  }
+
+  function renderMilestoneList(habit) {
+    var host = document.getElementById('milestoneListEl');
+    host.innerHTML = '';
+    if (habit.customMilestones.length === 0) {
+      host.appendChild(el('div', 'history-empty', 'No custom milestones yet.'));
+      return;
+    }
+    var sorted = habit.customMilestones.slice().sort(function (a, b) { return a.days - b.days; });
+    sorted.forEach(function (m) {
+      var row = el('div', 'activity-row');
+      row.appendChild(el('span', '', (m.label || milestoneDefaultTitle(m.days)) + ' — ' + m.days + 'd'));
+      var rm = el('button', 'activity-remove', 'Remove');
+      rm.addEventListener('click', function () {
+        openConfirm('Remove this milestone?', 'This just removes the custom target — it won’t affect your streak or history.', function () {
+          habit.customMilestones = habit.customMilestones.filter(function (x) { return x.id !== m.id; });
+          resyncMilestonesHit(habit);
+          saveData();
+          closeConfirm();
+          renderMilestoneList(habit);
+        });
+      });
+      row.appendChild(rm);
+      host.appendChild(row);
+    });
+  }
+
+  function addCustomMilestone(habitId) {
+    var habit = findHabit(habitId);
+    if (!habit) return;
+    var daysInput = document.getElementById('newMilestoneDaysInput');
+    var labelInput = document.getElementById('newMilestoneLabelInput');
+    var days = parseInt(daysInput.value, 10);
+    if (!days || days < 1) {
+      daysInput.focus();
+      return;
+    }
+    habit.customMilestones.push({ id: uid(), days: days, label: labelInput.value.trim() });
+    resyncMilestonesHit(habit);
+    saveData();
+    daysInput.value = '';
+    labelInput.value = '';
+    renderMilestoneList(habit);
+  }
+
+  // ---------- shareable streak card ----------
+
+  function drawStreakCard(habit) {
+    var size = 1080;
+    var canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    var ctx = canvas.getContext('2d');
+
+    ctx.fillStyle = '#E8B923';
+    ctx.fillRect(0, 0, size, size);
+
+    ctx.fillStyle = '#1A1A1A';
+    ctx.textAlign = 'center';
+
+    ctx.font = '600 34px "Work Sans"';
+    ctx.fillText((habit.emoji ? habit.emoji + '  ' : '') + habit.name.toUpperCase(), size / 2, 210);
+
+    var parts = formatStreak(currentStreakMs(habit), false);
+    var numText = String(parts.value);
+    var numSize = 340;
+    if (numText.length >= 4) numSize = 240;
+    else if (numText.length === 3) numSize = 280;
+    ctx.font = '600 ' + numSize + 'px "Fraunces"';
+    ctx.fillText(numText, size / 2, size / 2 + numSize * 0.32);
+
+    ctx.font = '400 40px "Work Sans"';
+    ctx.fillText(parts.unit, size / 2, size / 2 + numSize * 0.32 + 70);
+
+    ctx.font = '500 30px "Work Sans"';
+    ctx.fillStyle = '#6B6B63';
+    ctx.fillText('Best streak: ' + formatDays(bestStreakMs(habit)) + ' days', size / 2, size - 160);
+
+    ctx.font = '600 28px "Work Sans"';
+    ctx.fillStyle = '#1A1A1A';
+    ctx.fillText('QUIT IT', size / 2, size - 80);
+
+    return canvas;
+  }
+
+  function shareStreakCard(habitId) {
+    var habit = findHabit(habitId);
+    if (!habit) return;
+    document.fonts.ready.then(function () {
+      var canvas = drawStreakCard(habit);
+      canvas.toBlob(function (blob) {
+        if (!blob) return;
+        var fileName = habit.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase() + '-streak.png';
+        var file = new File([blob], fileName, { type: 'image/png' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          navigator.share({ files: [file], title: habit.name + ' streak' }).catch(function () {});
+        } else {
+          window.open(URL.createObjectURL(blob), '_blank');
+        }
+      }, 'image/png');
     });
   }
 
@@ -728,7 +846,8 @@
         lastRelapseAt: null,
         relapses: [],
         archived: false,
-        milestonesHit: []
+        milestonesHit: [],
+        customMilestones: []
       };
       data.habits.push(newHabit);
       saveData();
@@ -745,7 +864,7 @@
   // still trigger a celebration normally.
   function resyncMilestonesHit(habit) {
     var cur = currentStreakMs(habit);
-    habit.milestonesHit = MILESTONES.filter(function (m) { return cur >= m.ms; }).map(function (m) { return m.key; });
+    habit.milestonesHit = habitMilestones(habit).filter(function (m) { return cur >= m.ms; }).map(function (m) { return m.key; });
   }
 
   function logRelapse(habitId) {
@@ -905,7 +1024,7 @@
       if (habit.archived) return;
       var cur = currentStreakMs(habit);
       habit.milestonesHit = habit.milestonesHit || [];
-      MILESTONES.forEach(function (m) {
+      habitMilestones(habit).forEach(function (m) {
         if (cur >= m.ms && habit.milestonesHit.indexOf(m.key) === -1) {
           habit.milestonesHit.push(m.key);
           state.milestoneQueue.push({ habitName: habit.name, title: m.title });
@@ -1148,6 +1267,8 @@
       renderCalendar(findHabit(state.currentHabitId));
     });
     document.getElementById('setLastTimeBtn').addEventListener('click', function () { openLastRelapseSheet(state.currentHabitId); });
+    document.getElementById('saveStreakCardBtn').addEventListener('click', function () { shareStreakCard(state.currentHabitId); });
+    document.getElementById('addMilestoneBtn').addEventListener('click', function () { addCustomMilestone(state.currentHabitId); });
     document.getElementById('lastRelapseCancel').addEventListener('click', closeLastRelapseSheet);
     document.getElementById('lastRelapseSave').addEventListener('click', saveLastRelapseSheet);
     document.getElementById('triggerBtn').addEventListener('click', openTrigger);

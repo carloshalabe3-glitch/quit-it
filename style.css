@@ -908,6 +908,8 @@ input, textarea, select {
 
 .add-activity-row input:focus { outline: none; border-color: var(--yellow-deep); }
 
+.add-milestone-row input[type="number"] { flex: 0 0 4rem; }
+
 /* ---------- Backup & restore ---------- */
 
 .backup-textarea {

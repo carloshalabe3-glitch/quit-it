@@ -84,6 +84,7 @@
       <div class="detail-hero-unit" id="detailStreakUnit">days clean</div>
       <div class="detail-hero-since" id="detailSince"></div>
       <button class="hero-edit-link" id="setLastTimeBtn">Not accurate? Set the exact date &amp; time</button>
+      <button class="hero-edit-link" id="saveStreakCardBtn">Save streak card</button>
     </div>
     <div class="detail-stats">
       <div class="detail-stat">
@@ -113,6 +114,15 @@
     <div class="detail-section">
       <h2>Relapse history</h2>
       <div id="historyList" class="history-list"></div>
+    </div>
+    <div class="detail-section">
+      <h2>Custom milestones</h2>
+      <div id="milestoneListEl"></div>
+      <div class="add-activity-row add-milestone-row">
+        <input type="number" id="newMilestoneDaysInput" placeholder="Days" min="1" max="36500">
+        <input type="text" id="newMilestoneLabelInput" placeholder="Label (optional)" maxlength="40">
+        <button class="btn" id="addMilestoneBtn">Add</button>
+      </div>
     </div>
     <div class="detail-danger">
       <button class="btn btn-block" id="archiveBtn">Archive habit</button>
