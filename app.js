@@ -530,32 +530,7 @@
       bestEl: document.getElementById('detailBest')
     };
 
-    renderHeatmap(habit);
     renderHistory(habit);
-  }
-
-  function renderHeatmap(habit) {
-    var host = document.getElementById('heatmap');
-    host.innerHTML = '';
-    var days = 90;
-    var relapseDays = {};
-    habit.relapses.forEach(function (ts) {
-      var key = new Date(ts).toDateString();
-      relapseDays[key] = true;
-    });
-    var today = new Date();
-    for (var i = days - 1; i >= 0; i--) {
-      var d = new Date(today);
-      d.setDate(d.getDate() - i);
-      var cell = el('div', 'heat-cell');
-      if (d.getTime() < new Date(habit.createdAt).setHours(0, 0, 0, 0)) {
-        cell.style.opacity = '0.35';
-      }
-      if (relapseDays[d.toDateString()]) {
-        cell.setAttribute('data-level', '3');
-      }
-      host.appendChild(cell);
-    }
   }
 
   function renderHistory(habit) {

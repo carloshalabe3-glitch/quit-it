@@ -528,22 +528,6 @@ input, textarea, select {
   font-size: 0.9rem;
 }
 
-.heatmap {
-  display: grid;
-  grid-template-columns: repeat(13, 1fr);
-  gap: 3px;
-  margin-top: 0.9rem;
-}
-
-.heat-cell {
-  aspect-ratio: 1;
-  border-radius: 2px;
-  background: #EEEDE5;
-}
-
-.heat-cell[data-level="1"] { background: #F3DA97; }
-.heat-cell[data-level="2"] { background: var(--yellow); }
-.heat-cell[data-level="3"] { background: var(--relapse); }
 
 .detail-danger {
   padding: 1.25rem;
