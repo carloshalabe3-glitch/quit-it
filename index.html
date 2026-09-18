@@ -8,9 +8,9 @@
 
 <!-- PWA / home screen -->
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#E8B923">
+<meta name="theme-color" content="#F7F4EC">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Quit it">
 <meta name="mobile-web-app-capable" content="yes">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
@@ -20,16 +20,28 @@
 </head>
 <body>
 
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="sym-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="sym-dot" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="currentColor"/></symbol>
+  <symbol id="sym-ring" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+  <symbol id="sym-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 7v5l3.5 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="sym-ledger" viewBox="0 0 24 24"><path d="M5 4h14v16H5z M9 4v16 M12 9h4 M12 13h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="sym-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 10V7a4 4 0 018 0v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="sym-delete" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+</svg>
+
 <!-- ============ LOCK SCREEN ============ -->
-<div id="lockScreen" class="screen">
-  <div class="app-shell">
-    <div class="lock-mark">Quit it</div>
-    <div id="lockSub" class="lock-sub">Enter your PIN</div>
-    <div id="pinDots" class="pin-dots">
+<div id="lockScreen" class="screen screen-pin">
+  <div class="app-shell pin-shell">
+    <div class="pin-head">
+      <div class="wordmark">Quit it</div>
+      <div id="lockSub" class="pin-sub">Enter your PIN</div>
+    </div>
+    <div id="pinDots" class="pin-dots" aria-live="polite">
       <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
     </div>
-    <div id="lockError" class="lock-error"></div>
-    <div class="pin-pad">
+    <div id="lockError" class="pin-error" role="alert"></div>
+    <div class="pin-pad" data-pad="lock">
       <button class="pin-key" data-digit="1">1</button>
       <button class="pin-key" data-digit="2">2</button>
       <button class="pin-key" data-digit="3">3</button>
@@ -39,126 +51,323 @@
       <button class="pin-key" data-digit="7">7</button>
       <button class="pin-key" data-digit="8">8</button>
       <button class="pin-key" data-digit="9">9</button>
-      <button class="pin-key empty" tabindex="-1"></button>
+      <button class="pin-key empty" tabindex="-1" aria-hidden="true"></button>
       <button class="pin-key" data-digit="0">0</button>
-      <button class="pin-key" data-action="back">&#9003;</button>
+      <button class="pin-key pin-key-back" data-action="back" aria-label="Delete last digit">Delete</button>
     </div>
-    <button id="forgotPinBtn" class="forgot-link">Forgot PIN? Reset app</button>
+    <button id="forgotPinBtn" class="text-link pin-forgot">Forgot your PIN?</button>
+  </div>
+</div>
+
+<!-- ============ SET UP PIN (first run) ============ -->
+<div id="setupScreen" class="screen screen-pin hidden">
+  <div class="app-shell pin-shell">
+    <div class="pin-head">
+      <div class="wordmark">Quit it</div>
+      <div class="pin-sub" id="setupSub">Choose a 4-digit PIN. It locks this app every time you leave it.</div>
+    </div>
+    <div id="setupPinDots" class="pin-dots">
+      <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
+    </div>
+    <div id="setupError" class="pin-error" role="alert"></div>
+    <div class="pin-pad" data-pad="setup">
+      <button class="pin-key" data-digit="1">1</button>
+      <button class="pin-key" data-digit="2">2</button>
+      <button class="pin-key" data-digit="3">3</button>
+      <button class="pin-key" data-digit="4">4</button>
+      <button class="pin-key" data-digit="5">5</button>
+      <button class="pin-key" data-digit="6">6</button>
+      <button class="pin-key" data-digit="7">7</button>
+      <button class="pin-key" data-digit="8">8</button>
+      <button class="pin-key" data-digit="9">9</button>
+      <button class="pin-key empty" tabindex="-1" aria-hidden="true"></button>
+      <button class="pin-key" data-digit="0">0</button>
+      <button class="pin-key pin-key-back" data-action="back" aria-label="Delete last digit">Delete</button>
+    </div>
+    <p class="pin-note">There is no recovery. If you forget it, the only way back in is to wipe the app.</p>
+  </div>
+</div>
+
+<!-- ============ ONBOARDING (first run, after PIN) ============ -->
+<div id="onboardScreen" class="screen hidden">
+  <div class="app-shell onboard">
+    <div class="onboard-top">
+      <div class="wordmark">Quit it</div>
+      <div class="dateline" id="onboardDate"></div>
+    </div>
+    <h1 class="onboard-title">A private ledger for the things you&rsquo;re leaving behind.</h1>
+    <ol class="onboard-points">
+      <li>
+        <span class="onboard-num">1</span>
+        <div><b>Time counts continuously.</b> Your streak is measured from the moment you last slipped. Minutes first, then hours, then days.</div>
+      </li>
+      <li>
+        <span class="onboard-num">2</span>
+        <div><b>A relapse is an entry, not a verdict.</b> Log it and the count restarts from that moment. Your history and best streak stay on the page.</div>
+      </li>
+      <li>
+        <span class="onboard-num">3</span>
+        <div><b>It stays on this phone.</b> No account, no server, nothing sent anywhere. Back it up from Settings whenever you like.</div>
+      </li>
+    </ol>
+    <div class="onboard-actions">
+      <button class="btn btn-primary btn-block btn-lg" id="onboardAddBtn">Add the first thing you&rsquo;re quitting</button>
+    </div>
   </div>
 </div>
 
 <!-- ============ HOME SCREEN ============ -->
 <div id="homeScreen" class="screen hidden">
-  <div class="app-shell">
-    <div class="topbar">
-      <h1>Quit it</h1>
-      <div class="topbar-actions">
-        <button class="icon-btn" id="viewToggleBtn">Grid</button>
-        <button class="icon-btn" id="overviewBtn">Overview</button>
-        <button class="icon-btn" id="lockNowBtn">Lock</button>
+  <div class="app-shell home-shell">
+    <header class="masthead">
+      <div class="masthead-row">
+        <h1 class="wordmark">Quit it</h1>
+        <nav class="masthead-nav">
+          <button class="nav-btn" id="viewToggleBtn">Grid</button>
+          <button class="nav-btn" id="overviewBtn">Settings</button>
+          <button class="nav-btn" id="lockNowBtn">Lock</button>
+        </nav>
       </div>
-    </div>
+      <div class="dateline" id="homeDate"></div>
+    </header>
     <div id="quoteStrip" class="quote-strip">
       <p class="quote-text" id="quoteText"></p>
       <p class="quote-author" id="quoteAuthor"></p>
     </div>
     <div id="habitList" class="habit-list"></div>
     <div id="emptyState" class="empty-state hidden">
-      <p>Nothing tracked yet. Add the first habit you want to quit &mdash; you can add more anytime.</p>
+      <p class="empty-title">Nothing on the ledger right now.</p>
+      <p class="empty-sub">Add something you&rsquo;re quitting, or restore an archived habit from Settings.</p>
       <button class="btn btn-primary" id="emptyAddBtn">Add a habit</button>
     </div>
   </div>
-  <button class="btn btn-primary fab" id="addHabitFab">+ Add habit</button>
+  <div class="bottom-bar" id="homeBottomBar">
+    <button class="btn btn-primary btn-block" id="addHabitFab">Add a habit</button>
+  </div>
 </div>
 
 <!-- ============ HABIT DETAIL SCREEN ============ -->
 <div id="detailScreen" class="screen hidden">
   <div class="app-shell">
-    <div class="detail-header">
-      <button class="icon-btn" id="detailBackBtn">Back</button>
-      <button class="icon-btn" id="detailEditBtn">Edit</button>
-    </div>
-    <div class="detail-hero">
-      <div class="detail-hero-name" id="detailName"></div>
-      <div class="detail-hero-streak" id="detailStreakNum">0</div>
-      <div class="detail-hero-unit" id="detailStreakUnit">days clean</div>
-      <div class="detail-hero-since" id="detailSince"></div>
-      <button class="hero-edit-link" id="setLastTimeBtn">Not accurate? Set the exact date &amp; time</button>
-      <button class="hero-edit-link" id="saveStreakCardBtn">Save streak card</button>
-    </div>
-    <div class="detail-stats">
-      <div class="detail-stat">
-        <div class="detail-stat-num" id="detailBest">0</div>
-        <div class="detail-stat-label">best streak (days)</div>
+    <header class="subhead">
+      <button class="nav-btn" id="detailBackBtn">Back</button>
+      <button class="nav-btn" id="detailEditBtn">Edit</button>
+    </header>
+
+    <section class="hero">
+      <div class="hero-name" id="detailName"></div>
+      <div class="eyebrow">Current streak</div>
+      <div class="hero-figure">
+        <span class="hero-num" id="detailStreakNum">0</span>
+        <span class="hero-unit" id="detailStreakUnit">days</span>
       </div>
-      <div class="detail-stat">
-        <div class="detail-stat-num" id="detailRelapseCount">0</div>
-        <div class="detail-stat-label">relapses logged</div>
+      <div class="hero-since">
+        <span id="detailSince"></span>
+        <button class="text-link" id="setLastTimeBtn">Correct this</button>
       </div>
-    </div>
-    <div class="detail-actions">
-      <button class="btn btn-primary btn-block" id="triggerBtn">I need something else to do right now</button>
-      <button class="btn btn-relapse btn-block" id="logRelapseBtn">Log relapse</button>
-    </div>
-    <div class="detail-section">
-      <div class="cal-header">
-        <button class="cal-nav" id="calPrevBtn">Prev</button>
-        <span class="cal-month-label" id="calMonthLabel"></span>
-        <button class="cal-nav" id="calNextBtn">Next</button>
+      <div class="next-milestone" id="detailNext">
+        <div class="progress"><i id="detailProgressFill"></i></div>
+        <div class="next-label" id="detailNextLabel"></div>
+      </div>
+    </section>
+
+    <section class="actions">
+      <button class="btn btn-primary btn-block btn-lg" id="triggerBtn">I&rsquo;m triggered</button>
+      <div class="actions-row">
+        <button class="btn btn-relapse" id="logRelapseBtn">Log a relapse</button>
+        <button class="btn btn-quiet" id="saveStreakCardBtn">Streak card</button>
+      </div>
+    </section>
+
+    <section class="ledger-stats">
+      <div class="stat">
+        <div class="stat-num" id="detailBest">0</div>
+        <div class="stat-label">Best streak</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num" id="detailAvg">&ndash;</div>
+        <div class="stat-label">Average streak</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num" id="detailRelapseCount">0</div>
+        <div class="stat-label">Relapses logged</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num" id="detailTrackingDays">0</div>
+        <div class="stat-label">Days on the ledger</div>
+      </div>
+    </section>
+
+    <section class="section" id="patternsSection">
+      <div class="section-head">
+        <h2>Patterns</h2>
+        <span class="section-note" id="patternsNote"></span>
+      </div>
+      <div id="patternsBody"></div>
+    </section>
+
+    <section class="section">
+      <div class="section-head cal-head">
+        <button class="nav-btn nav-btn-sm" id="calPrevBtn">Prev</button>
+        <h2 id="calMonthLabel"></h2>
+        <button class="nav-btn nav-btn-sm" id="calNextBtn">Next</button>
       </div>
       <div class="cal-weekdays">
         <span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span>
       </div>
       <div class="cal-grid" id="calGrid"></div>
-    </div>
-    <div class="detail-section">
-      <h2>Relapse history</h2>
-      <div id="historyList" class="history-list"></div>
-    </div>
-    <div class="detail-section">
-      <h2>Custom milestones</h2>
-      <div id="milestoneListEl"></div>
-      <div class="add-activity-row add-milestone-row">
-        <input type="number" id="newMilestoneDaysInput" placeholder="Days" min="1" max="36500">
-        <input type="text" id="newMilestoneLabelInput" placeholder="Label (optional)" maxlength="40">
-        <button class="btn" id="addMilestoneBtn">Add</button>
+      <div class="cal-legend"><i class="cal-swatch cal-swatch-event"></i> Relapse <i class="cal-swatch cal-swatch-today"></i> Today</div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <h2>Milestones</h2>
+        <span class="section-note">Reached once per streak</span>
       </div>
-    </div>
-    <div class="detail-danger">
-      <button class="btn btn-block" id="archiveBtn">Archive habit</button>
-      <button class="btn btn-danger btn-block" id="deleteBtn">Delete</button>
-    </div>
+      <div id="milestoneListEl" class="milestone-list"></div>
+      <div class="inline-form" id="milestoneForm">
+        <input type="number" inputmode="numeric" id="newMilestoneDaysInput" placeholder="Days" min="1" max="36500" aria-label="Days">
+        <input type="text" id="newMilestoneLabelInput" placeholder="Name it (optional)" maxlength="40" aria-label="Milestone name">
+        <button class="btn btn-sm" id="addMilestoneBtn">Add</button>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <h2>History</h2>
+        <span class="section-note" id="historyNote"></span>
+      </div>
+      <div id="historyList" class="history-list"></div>
+    </section>
+
+    <section class="section section-quiet">
+      <button class="text-link" id="archiveBtn">Archive this habit</button>
+      <span class="dot-sep">&middot;</span>
+      <button class="text-link text-link-danger" id="deleteBtn">Delete it and its history</button>
+    </section>
   </div>
 </div>
 
-<!-- ============ OVERVIEW SCREEN ============ -->
+<!-- ============ SETTINGS SCREEN ============ -->
 <div id="overviewScreen" class="screen hidden">
   <div class="app-shell">
-    <div class="detail-header">
-      <button class="icon-btn" id="overviewBackBtn">Back</button>
+    <header class="subhead">
+      <button class="nav-btn" id="overviewBackBtn">Back</button>
+      <h1 class="subhead-title">Settings</h1>
+      <span class="nav-spacer"></span>
+    </header>
+
+    <section class="section">
+      <div class="section-head"><h2>On the ledger</h2></div>
+      <div id="overviewList"></div>
+    </section>
+
+    <section class="section" id="archivedSection">
+      <div class="section-head"><h2>Archived</h2><span class="section-note">Hidden, history kept</span></div>
+      <div id="archivedList"></div>
+    </section>
+
+    <section class="section">
+      <div class="section-head"><h2>When you&rsquo;re triggered</h2></div>
+      <button class="settings-row" id="activitiesBtn">
+        <span>Things to do instead</span>
+        <span class="settings-meta" id="activitiesCount"></span>
+      </button>
+    </section>
+
+    <section class="section">
+      <div class="section-head"><h2>Privacy</h2></div>
+      <button class="settings-row" id="changePinBtn"><span>Change PIN</span></button>
+      <button class="settings-row" id="settingsLockBtn"><span>Lock now</span></button>
+      <p class="section-foot">The app locks itself the moment it goes to the background.</p>
+    </section>
+
+    <section class="section">
+      <div class="section-head"><h2>Your data</h2></div>
+      <button class="settings-row" id="backupBtn"><span>Backup &amp; restore</span></button>
+      <p class="section-foot">Everything lives in this browser&rsquo;s storage on this device. Nothing is sent anywhere. A backup is the only copy that exists outside it.</p>
+    </section>
+
+    <section class="section section-quiet">
+      <span class="about-line">Quit it <span id="aboutVersion"></span></span>
+    </section>
+  </div>
+</div>
+
+<!-- ============ TRIGGERED SCREEN ============ -->
+<div id="triggerScreen" class="screen screen-dark hidden">
+  <div class="app-shell trigger-shell">
+    <div class="trigger-top">
+      <span class="eyebrow eyebrow-light">This will pass</span>
+      <button class="nav-btn nav-btn-light" id="triggerCloseBtn">Close</button>
     </div>
-    <div id="overviewList"></div>
-    <div class="detail-section">
-      <h2>Settings</h2>
-      <button class="settings-row" id="activitiesBtn">Edit activities</button>
-      <button class="settings-row" id="backupBtn">Backup &amp; restore</button>
-      <button class="settings-row" id="changePinBtn">Change PIN</button>
+
+    <div class="trigger-body" id="triggerBody">
+      <div class="trigger-mode" id="triggerIdeaMode">
+        <div class="trigger-lead">Right now, do this instead:</div>
+        <div class="trigger-card" id="triggerCard">
+          <div class="trigger-card-text" id="triggerText">&nbsp;</div>
+        </div>
+        <div class="trigger-why hidden" id="triggerWhy">
+          <div class="trigger-why-label">You wrote this down for exactly this moment:</div>
+          <div class="trigger-why-text" id="triggerWhyText"></div>
+        </div>
+      </div>
+
+      <div class="trigger-mode hidden" id="triggerBreathMode">
+        <div class="breath-stage">
+          <div class="breath-ring" id="breathRing"><div class="breath-core"></div></div>
+          <div class="breath-phase" id="breathPhase">Get ready</div>
+          <div class="breath-count" id="breathCount"></div>
+        </div>
+        <div class="breath-hint">Four seconds in, hold, out, hold. Four rounds.</div>
+      </div>
+    </div>
+
+    <div class="trigger-actions" id="triggerIdeaActions">
+      <div class="actions-row">
+        <button class="btn btn-outline-light" id="triggerRerollBtn">Another idea</button>
+        <button class="btn btn-outline-light" id="triggerBreatheBtn">Breathe</button>
+      </div>
+      <button class="btn btn-primary btn-block btn-lg" id="triggerOkayBtn">I&rsquo;m steady now</button>
+    </div>
+    <div class="trigger-actions hidden" id="triggerBreathActions">
+      <button class="btn btn-outline-light btn-block" id="breathStopBtn">Stop</button>
+    </div>
+    <div class="trigger-foot">
+      <span id="triggerTimer">Here for 0:00</span>
+      <span class="trigger-foot-note">Urges crest and fade. Stay with it.</span>
     </div>
   </div>
 </div>
 
 <!-- ============ ADD/EDIT HABIT SHEET ============ -->
-<div id="habitSheet" class="sheet-backdrop hidden">
-  <div class="sheet">
+<div id="habitSheet" class="sheet-backdrop hidden" data-sheet>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="habitSheetTitle">
+    <div class="sheet-handle"></div>
     <h2 id="habitSheetTitle">Add a habit</h2>
     <div class="field">
       <label for="habitNameInput">What are you quitting?</label>
-      <input type="text" id="habitNameInput" placeholder="e.g. porn, junk food, doomscrolling" maxlength="40">
+      <input type="text" id="habitNameInput" placeholder="e.g. porn, nicotine, doomscrolling" maxlength="40" autocomplete="off">
     </div>
     <div class="field">
-      <label>Icon (optional)</label>
-      <div class="emoji-grid" id="emojiGrid"></div>
+      <label>Mark <span class="opt">optional</span></label>
+      <div class="icon-grid" id="emojiGrid"></div>
     </div>
+    <div class="field">
+      <label for="habitWhyInput">Why you&rsquo;re quitting <span class="opt">optional</span></label>
+      <textarea id="habitWhyInput" rows="2" maxlength="160" placeholder="In your own words."></textarea>
+      <p class="field-hint">Shown back to you, and only you, when you tap &ldquo;I&rsquo;m triggered&rdquo;.</p>
+    </div>
+    <div class="field" id="habitSinceField">
+      <label>Clean since</label>
+      <div class="field-pair">
+        <input type="date" id="habitSinceDate" aria-label="Date">
+        <input type="time" id="habitSinceTime" aria-label="Time">
+      </div>
+      <p class="field-hint">Leave as is to count from now. Set it earlier if you already stopped.</p>
+    </div>
+    <div id="habitSheetError" class="form-error" role="alert"></div>
     <div class="sheet-actions">
       <button class="btn" id="habitSheetCancel">Cancel</button>
       <button class="btn btn-primary" id="habitSheetSave">Save</button>
@@ -166,20 +375,45 @@
   </div>
 </div>
 
-<!-- ============ SET LAST RELAPSE TIME SHEET ============ -->
-<div id="lastRelapseSheet" class="sheet-backdrop hidden">
-  <div class="sheet">
-    <h2>When did you last do it?</h2>
-    <p class="confirm-text">This corrects when your current streak started counting from. Editing it again later just updates the same record — it won't double-count as another relapse.</p>
-    <div class="field">
-      <label for="lastRelapseDate">Date</label>
-      <input type="date" id="lastRelapseDate">
+<!-- ============ LOG RELAPSE SHEET ============ -->
+<div id="relapseSheet" class="sheet-backdrop hidden" data-sheet>
+  <div class="sheet" role="dialog" aria-modal="true">
+    <div class="sheet-handle"></div>
+    <h2>Log a relapse</h2>
+    <p class="sheet-text">The count restarts from the moment it happened. Nothing else changes: your history and your best streak stay exactly as they are.</p>
+    <div class="choice-list">
+      <button class="choice" id="relapseNowBtn">
+        <span class="choice-title">It just happened</span>
+        <span class="choice-sub">Restart the count from right now</span>
+      </button>
+      <button class="choice" id="relapseEarlierBtn">
+        <span class="choice-title">It was earlier</span>
+        <span class="choice-sub">Pick the date and time</span>
+      </button>
     </div>
-    <div class="field">
-      <label for="lastRelapseTime">Time</label>
-      <input type="time" id="lastRelapseTime">
+    <div class="field-pair hidden" id="relapseWhenFields">
+      <input type="date" id="relapseDate" aria-label="Date">
+      <input type="time" id="relapseTime" aria-label="Time">
     </div>
-    <div id="lastRelapseError" class="lock-error"></div>
+    <div id="relapseError" class="form-error" role="alert"></div>
+    <div class="sheet-actions">
+      <button class="btn" id="relapseCancel">Cancel</button>
+      <button class="btn btn-danger hidden" id="relapseSaveBtn">Log it</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ CORRECT START TIME SHEET ============ -->
+<div id="lastRelapseSheet" class="sheet-backdrop hidden" data-sheet>
+  <div class="sheet" role="dialog" aria-modal="true">
+    <div class="sheet-handle"></div>
+    <h2>When did the count really start?</h2>
+    <p class="sheet-text" id="lastRelapseText">This adjusts the start of your current streak. Correcting it again later edits the same entry. It never adds a second relapse.</p>
+    <div class="field-pair">
+      <input type="date" id="lastRelapseDate" aria-label="Date">
+      <input type="time" id="lastRelapseTime" aria-label="Time">
+    </div>
+    <div id="lastRelapseError" class="form-error" role="alert"></div>
     <div class="sheet-actions">
       <button class="btn" id="lastRelapseCancel">Cancel</button>
       <button class="btn btn-primary" id="lastRelapseSave">Save</button>
@@ -188,10 +422,11 @@
 </div>
 
 <!-- ============ CONFIRM SHEET (generic) ============ -->
-<div id="confirmSheet" class="sheet-backdrop hidden">
-  <div class="sheet">
+<div id="confirmSheet" class="sheet-backdrop hidden" data-sheet>
+  <div class="sheet sheet-compact" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle">
+    <div class="sheet-handle"></div>
     <h2 id="confirmTitle">Are you sure?</h2>
-    <p class="confirm-text" id="confirmText"></p>
+    <p class="sheet-text" id="confirmText"></p>
     <div class="sheet-actions">
       <button class="btn" id="confirmCancel">Cancel</button>
       <button class="btn btn-danger" id="confirmOk">Confirm</button>
@@ -199,69 +434,42 @@
   </div>
 </div>
 
-<!-- ============ SET / RESET PIN SHEET ============ -->
-<div id="setupScreen" class="screen hidden">
-  <div class="app-shell">
-    <div class="lock-mark">Welcome to Quit it</div>
-    <div class="lock-sub" id="setupSub">This is private. Set a 4-digit PIN to lock the app.</div>
-    <div style="display:flex;flex-direction:column;align-items:center;">
-      <div id="setupPinDots" class="pin-dots">
-        <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
-      </div>
-      <div id="setupError" class="lock-error"></div>
-      <div class="pin-pad">
-        <button class="pin-key" data-digit="1">1</button>
-        <button class="pin-key" data-digit="2">2</button>
-        <button class="pin-key" data-digit="3">3</button>
-        <button class="pin-key" data-digit="4">4</button>
-        <button class="pin-key" data-digit="5">5</button>
-        <button class="pin-key" data-digit="6">6</button>
-        <button class="pin-key" data-digit="7">7</button>
-        <button class="pin-key" data-digit="8">8</button>
-        <button class="pin-key" data-digit="9">9</button>
-        <button class="pin-key empty" tabindex="-1"></button>
-        <button class="pin-key" data-digit="0">0</button>
-        <button class="pin-key" data-action="back">&#9003;</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ============ TRIGGERED SCREEN ============ -->
-<div id="triggerScreen" class="screen hidden" style="position:relative;">
-  <button class="trigger-close" id="triggerCloseBtn">Close</button>
-  <div class="app-shell">
-    <div class="trigger-card-wrap">
-      <div class="trigger-label">Do this instead, right now</div>
-      <div class="trigger-card" id="triggerCard">
-        <div class="trigger-card-text" id="triggerText">&nbsp;</div>
-      </div>
-    </div>
-    <div class="trigger-actions">
-      <button class="btn btn-reroll" id="triggerRerollBtn">Give me another</button>
-      <button class="btn btn-okay" id="triggerOkayBtn">I'm okay now</button>
-    </div>
-  </div>
-</div>
-
-<!-- ============ MILESTONE CELEBRATION ============ -->
+<!-- ============ MILESTONE ============ -->
 <div id="milestoneBackdrop" class="milestone-backdrop hidden">
-  <div class="milestone-card">
-    <div class="milestone-eyebrow" id="milestoneHabitName"></div>
+  <div class="milestone-card" role="dialog" aria-modal="true">
+    <div class="milestone-rule"></div>
+    <div class="eyebrow" id="milestoneHabitName"></div>
     <div class="milestone-title" id="milestoneTitle">1 week clean</div>
-    <div class="milestone-sub" id="milestoneSub">Keep going. This one counts.</div>
-    <button class="btn btn-block" id="milestoneOkBtn">Keep going</button>
+    <div class="milestone-sub" id="milestoneSub">Entered in your ledger.</div>
+    <button class="btn btn-ink btn-block" id="milestoneOkBtn">Noted</button>
+  </div>
+</div>
+
+<!-- ============ STREAK CARD SHEET ============ -->
+<div id="cardSheet" class="sheet-backdrop hidden" data-sheet>
+  <div class="sheet" role="dialog" aria-modal="true">
+    <div class="sheet-handle"></div>
+    <h2>Streak card</h2>
+    <div class="card-preview" id="cardPreview"></div>
+    <p class="sheet-text sheet-text-center" id="cardHint">Only what you see here goes in the image. Nothing else.</p>
+    <div class="sheet-actions">
+      <button class="btn" id="cardCloseBtn">Close</button>
+      <button class="btn btn-primary" id="cardShareBtn">Share</button>
+    </div>
+    <a id="cardDownloadLink" class="text-link text-link-center" download="streak.png" href="#">Save image instead</a>
   </div>
 </div>
 
 <!-- ============ ACTIVITIES SHEET ============ -->
-<div id="activitiesSheet" class="sheet-backdrop hidden">
-  <div class="sheet">
-    <h2>Alternative activities</h2>
-    <div id="activityListEl"></div>
-    <div class="add-activity-row">
-      <input type="text" id="newActivityInput" placeholder="Add your own idea" maxlength="80">
-      <button class="btn" id="addActivityBtn">Add</button>
+<div id="activitiesSheet" class="sheet-backdrop hidden" data-sheet>
+  <div class="sheet" role="dialog" aria-modal="true">
+    <div class="sheet-handle"></div>
+    <h2>Things to do instead</h2>
+    <p class="sheet-text">One of these comes up at random when you tap "I'm triggered". Remove the ones that don't work for you. Add the ones that do.</p>
+    <div id="activityListEl" class="plain-list"></div>
+    <div class="inline-form">
+      <input type="text" id="newActivityInput" placeholder="Add your own" maxlength="80" aria-label="New activity">
+      <button class="btn btn-sm" id="addActivityBtn">Add</button>
     </div>
     <div class="sheet-actions">
       <button class="btn btn-primary btn-block" id="activitiesDoneBtn">Done</button>
@@ -270,24 +478,24 @@
 </div>
 
 <!-- ============ BACKUP & RESTORE SHEET ============ -->
-<div id="backupSheet" class="sheet-backdrop hidden">
-  <div class="sheet">
+<div id="backupSheet" class="sheet-backdrop hidden" data-sheet>
+  <div class="sheet" role="dialog" aria-modal="true">
+    <div class="sheet-handle"></div>
     <h2>Backup &amp; restore</h2>
-    <p class="confirm-text">Copy this text somewhere safe &mdash; Notes, a password manager, an email to yourself. If you update or reinstall the app, paste it back in below to restore everything: habits, streaks, and history.</p>
+    <p class="sheet-text">Your backup is a block of text. Keep it somewhere private: a password manager, a locked note. It contains everything, including your habit names.</p>
     <div class="field">
       <label for="backupExportArea">Your backup</label>
-      <textarea id="backupExportArea" class="backup-textarea" readonly rows="5"></textarea>
+      <textarea id="backupExportArea" class="mono-area" readonly rows="4"></textarea>
     </div>
-    <button class="btn btn-block" id="backupCopyBtn">Copy to clipboard</button>
-    <div id="backupCopyStatus" class="backup-status"></div>
+    <button class="btn btn-block" id="backupCopyBtn">Copy backup text</button>
 
-    <div class="backup-divider"></div>
+    <div class="divider"></div>
 
     <div class="field">
       <label for="backupImportArea">Restore from a backup</label>
-      <textarea id="backupImportArea" class="backup-textarea" rows="5" placeholder="Paste your backup text here"></textarea>
+      <textarea id="backupImportArea" class="mono-area" rows="4" placeholder="Paste backup text here"></textarea>
     </div>
-    <div id="backupImportError" class="lock-error"></div>
+    <div id="backupImportError" class="form-error" role="alert"></div>
     <div class="sheet-actions">
       <button class="btn" id="backupCloseBtn">Close</button>
       <button class="btn btn-danger" id="backupRestoreBtn">Restore</button>
@@ -296,16 +504,17 @@
 </div>
 
 <!-- ============ CHANGE PIN SHEET ============ -->
-<div id="changePinSheet" class="sheet-backdrop hidden">
-  <div class="sheet">
+<div id="changePinSheet" class="sheet-backdrop hidden" data-sheet>
+  <div class="sheet" role="dialog" aria-modal="true">
+    <div class="sheet-handle"></div>
     <h2>Change your PIN</h2>
-    <p class="confirm-text" id="changePinSub">Enter a new 4-digit PIN.</p>
-    <div style="display:flex;flex-direction:column;align-items:center;">
+    <p class="sheet-text sheet-text-center" id="changePinSub">Enter a new 4-digit PIN.</p>
+    <div class="pin-inline">
       <div id="changePinDots" class="pin-dots">
         <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
       </div>
-      <div id="changePinError" class="lock-error"></div>
-      <div class="pin-pad">
+      <div id="changePinError" class="pin-error" role="alert"></div>
+      <div class="pin-pad" data-pad="changePin">
         <button class="pin-key" data-digit="1">1</button>
         <button class="pin-key" data-digit="2">2</button>
         <button class="pin-key" data-digit="3">3</button>
@@ -315,15 +524,21 @@
         <button class="pin-key" data-digit="7">7</button>
         <button class="pin-key" data-digit="8">8</button>
         <button class="pin-key" data-digit="9">9</button>
-        <button class="pin-key empty" tabindex="-1"></button>
+        <button class="pin-key empty" tabindex="-1" aria-hidden="true"></button>
         <button class="pin-key" data-digit="0">0</button>
-        <button class="pin-key" data-action="back">&#9003;</button>
+        <button class="pin-key pin-key-back" data-action="back" aria-label="Delete last digit">Delete</button>
       </div>
     </div>
     <div class="sheet-actions">
       <button class="btn btn-block" id="changePinCancel">Cancel</button>
     </div>
   </div>
+</div>
+
+<!-- ============ TOAST ============ -->
+<div id="toast" class="toast hidden" role="status" aria-live="polite">
+  <span id="toastText"></span>
+  <button id="toastAction" class="toast-action hidden"></button>
 </div>
 
 <script src="app.js"></script>
