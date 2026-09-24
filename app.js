@@ -846,6 +846,7 @@
 
     var sinceText = (habit.relapses.length ? 'Since your last relapse, ' : 'Counting since ') + formatDateTime(streakStart(habit));
     $('detailSince').textContent = sinceText;
+    $('setLastTimeBtn').classList.toggle('hidden', habit.relapses.length > 0);
 
     $('detailProgressFill').style.width = '0%';
     requestAnimationFrame(function () { paintProgress(habit, detailRefs.fill, detailRefs.nextLabel); });
@@ -1614,21 +1615,13 @@
   // Corrects the CURRENT streak's start time. If a relapse is already on
   // record, this replaces that entry rather than adding a new one — editing
   // the date/time twice should not double-count as two relapses.
-  function setLastRelapseAt(habitId, timestamp) {
+  // Only reachable before a habit's first relapse — once there's history,
+  // the calendar is the direct way to add, move, or remove an entry.
+  function correctTrackingStart(habitId, timestamp) {
     var habit = findHabit(habitId);
     if (!habit) return;
-    if (habit.relapses.length > 0) {
-      var maxIdx = 0;
-      for (var i = 1; i < habit.relapses.length; i++) {
-        if (habit.relapses[i] > habit.relapses[maxIdx]) maxIdx = i;
-      }
-      habit.relapses[maxIdx] = timestamp;
-      habit.lastRelapseAt = timestamp;
-    } else {
-      // No relapse on record: this is the start of tracking itself.
-      habit.createdAt = timestamp;
-      habit.lastRelapseAt = null;
-    }
+    habit.createdAt = timestamp;
+    habit.lastRelapseAt = null;
     resyncMilestonesHit(habit);
     saveData();
     if (state.screen === 'detail') renderDetail(habitId);
@@ -1681,8 +1674,8 @@
     var ts = parseDateTimeInputs($('relapseDate').value, $('relapseTime').value);
     if (isNaN(ts)) { errEl.textContent = 'Enter a date and time.'; return; }
     if (ts > Date.now()) { errEl.textContent = "That's in the future. Pick a time up to now."; return; }
-    if (ts <= streakStart(habit)) {
-      errEl.textContent = 'That is before this streak started (' + formatDateTime(streakStart(habit)) + '). To move the start, use "Correct this" instead.';
+    if (ts < habit.createdAt) {
+      errEl.textContent = 'That is before you started tracking (' + formatDateTime(habit.createdAt) + ').';
       return;
     }
     closeSheet('relapseSheet');
@@ -1700,9 +1693,7 @@
     var now = new Date();
     $('lastRelapseDate').max = dateInputValue(now);
     $('lastRelapseError').textContent = '';
-    $('lastRelapseText').textContent = habit.relapses.length
-      ? 'This moves your most recent relapse to the right moment, so the count starts from there. Correcting it again later edits the same entry. It never adds a second relapse.'
-      : 'This sets the moment you actually stopped, so the count starts from there. Nothing is logged as a relapse.';
+    $('lastRelapseText').textContent = 'This sets the moment you actually stopped, so the count starts from there. Nothing is logged as a relapse.';
     openSheet('lastRelapseSheet');
   }
 
@@ -1713,15 +1704,7 @@
     var ts = parseDateTimeInputs($('lastRelapseDate').value, $('lastRelapseTime').value);
     if (isNaN(ts)) { errEl.textContent = 'Enter a date and time.'; return; }
     if (ts > Date.now()) { errEl.textContent = "That's in the future. Pick a time up to now."; return; }
-    if (habit.relapses.length > 1) {
-      var sorted = habit.relapses.slice().sort(function (a, b) { return a - b; });
-      var previous = sorted[sorted.length - 2];
-      if (ts <= previous) {
-        errEl.textContent = 'That is before the relapse on ' + formatDateShort(previous) + '. Remove that entry from History first if it is wrong.';
-        return;
-      }
-    }
-    setLastRelapseAt(habit.id, ts);
+    correctTrackingStart(habit.id, ts);
     closeSheet('lastRelapseSheet');
     showToast('Start corrected.');
   }
