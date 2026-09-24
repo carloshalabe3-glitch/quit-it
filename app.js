@@ -1147,9 +1147,18 @@
       cell.style.setProperty('--i', day);
       var key = year + '-' + month + '-' + day;
       if (cellDate.getTime() === todayDate.getTime()) cell.classList.add('today');
-      if (cellDate > todayDate) cell.classList.add('future');
-      else if (cellDate < startDate) cell.classList.add('dim');
-      else if (relapseDays[key]) cell.classList.add('event');
+      if (cellDate > todayDate) {
+        cell.classList.add('future');
+      } else if (cellDate < startDate) {
+        cell.classList.add('dim');
+      } else {
+        cell.classList.add('is-editable');
+        cell.dataset.key = key;
+        cell.dataset.y = year;
+        cell.dataset.m = month;
+        cell.dataset.d = day;
+        if (relapseDays[key]) cell.classList.add('event');
+      }
       grid.appendChild(cell);
     }
 
@@ -2208,6 +2217,29 @@
     $('calNextBtn').addEventListener('click', function () {
       state.calendarOffset += 1;
       renderCalendar(findHabit(state.currentHabitId));
+    });
+    $('calGrid').addEventListener('click', function (e) {
+      var cell = e.target.closest('.cal-cell.is-editable');
+      if (!cell) return;
+      var habit = findHabit(state.currentHabitId);
+      if (!habit) return;
+      var y = Number(cell.dataset.y), m = Number(cell.dataset.m), d = Number(cell.dataset.d);
+      var onDay = habit.relapses.filter(function (ts) {
+        var dt = new Date(ts);
+        return dt.getFullYear() === y && dt.getMonth() === m && dt.getDate() === d;
+      });
+      if (onDay.length === 0) {
+        var ts = new Date(y, m, d, 12, 0, 0, 0).getTime();
+        if (ts > Date.now()) ts = Date.now();
+        logRelapse(habit.id, ts);
+      } else {
+        var target = onDay[onDay.length - 1];
+        openConfirm('Remove this relapse?', 'It comes off the history. If it was the most recent one, your current streak will be recalculated from the entry before it.', function () {
+          removeRelapseEntry(habit.id, target);
+          closeConfirm();
+          showToast('Entry removed.');
+        });
+      }
     });
     $('setLastTimeBtn').addEventListener('click', function () { openLastRelapseSheet(state.currentHabitId); });
     $('saveStreakCardBtn').addEventListener('click', function () { openStreakCard(state.currentHabitId); });
