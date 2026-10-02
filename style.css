@@ -606,6 +606,21 @@ ol, ul { margin: 0; padding: 0; list-style: none; }
 /* calendar */
 .cal-head { margin-bottom: 0.75rem; }
 .cal-head h2 { text-align: center; flex: 1; }
+.cal-arrow {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-radius: var(--r-s);
+  color: var(--ink);
+  transition: background var(--t-fast), transform var(--t-fast) var(--ease-out);
+}
+.cal-arrow svg { width: 20px; height: 20px; }
+.cal-arrow:active { background: var(--paper-2); transform: scale(0.94); }
+.cal-arrow:disabled { opacity: 0.25; cursor: default; }
 
 .cal-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); margin-bottom: 0.35rem; }
 .cal-weekdays span { text-align: center; font-size: 0.68rem; color: var(--ink-3); font-weight: 600; letter-spacing: 0.06em; }
