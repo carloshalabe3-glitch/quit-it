@@ -221,22 +221,37 @@
     return null;
   }
 
+  // The clean-since date (createdAt) restarts the count just like a relapse,
+  // so relapses logged before it are history and never reset today's streak.
   function streakStart(habit) {
-    return habit.lastRelapseAt || habit.createdAt;
+    return Math.max(habit.lastRelapseAt || 0, habit.createdAt);
+  }
+
+  function countsFromRelapse(habit) {
+    return !!habit.lastRelapseAt && habit.lastRelapseAt >= habit.createdAt;
+  }
+
+  function ledgerStart(habit) {
+    return habit.relapses.length ? Math.min(habit.createdAt, Math.min.apply(null, habit.relapses)) : habit.createdAt;
   }
 
   function currentStreakMs(habit) {
     return Math.max(0, Date.now() - streakStart(habit));
   }
 
-  // Completed streak segments, oldest first: [{start, end, ms}]
+  // Completed streak segments, oldest first: [{start, end, ms}]. A run only
+  // counts once its start is known: a relapse or the clean-since date.
   function completedSegments(habit) {
-    var sorted = habit.relapses.slice().sort(function (a, b) { return a - b; });
-    var points = [Math.min(habit.createdAt, sorted.length ? sorted[0] : habit.createdAt)].concat(sorted);
+    var events = habit.relapses.map(function (t) { return { t: t, relapse: true }; });
+    events.push({ t: habit.createdAt, relapse: false });
+    events.sort(function (a, b) { return a.t - b.t || (a.relapse ? -1 : 1); });
     var segs = [];
-    for (var i = 1; i < points.length; i++) {
-      segs.push({ start: points[i - 1], end: points[i], ms: Math.max(0, points[i] - points[i - 1]) });
-    }
+    var runStart = null;
+    events.forEach(function (e) {
+      if (!e.relapse) { runStart = e.t; return; }
+      if (runStart !== null) segs.push({ start: runStart, end: e.t, ms: Math.max(0, e.t - runStart) });
+      runStart = e.t;
+    });
     return segs;
   }
 
@@ -844,9 +859,9 @@
     };
     paintDetailFigures(habit);
 
-    var sinceText = (habit.relapses.length ? 'Since your last relapse, ' : 'Counting since ') + formatDateTime(streakStart(habit));
+    var sinceText = (countsFromRelapse(habit) ? 'Since your last relapse, ' : 'Counting since ') + formatDateTime(streakStart(habit));
     $('detailSince').textContent = sinceText;
-    $('setLastTimeBtn').classList.toggle('hidden', habit.relapses.length > 0);
+    $('setLastTimeBtn').classList.toggle('hidden', countsFromRelapse(habit));
 
     $('detailProgressFill').style.width = '0%';
     requestAnimationFrame(function () { paintProgress(habit, detailRefs.fill, detailRefs.nextLabel); });
@@ -873,7 +888,7 @@
     }
 
     $('detailRelapseCount').textContent = habit.relapses.length;
-    var onLedger = Math.max(1, Math.floor((Date.now() - Math.min(habit.createdAt, streakStart(habit))) / DAY) + 1);
+    var onLedger = Math.max(1, Math.floor((Date.now() - ledgerStart(habit)) / DAY) + 1);
     $('detailTrackingDays').textContent = onLedger;
   }
 
@@ -1134,8 +1149,6 @@
     grid.innerHTML = '';
     var firstDayOfWeek = new Date(year, month, 1).getDay();
     var daysInMonth = new Date(year, month + 1, 0).getDate();
-    var startDate = new Date(Math.min(habit.createdAt, streakStart(habit)));
-    startDate.setHours(0, 0, 0, 0);
     var todayDate = new Date();
     todayDate.setHours(0, 0, 0, 0);
 
@@ -1150,8 +1163,6 @@
       if (cellDate.getTime() === todayDate.getTime()) cell.classList.add('today');
       if (cellDate > todayDate) {
         cell.classList.add('future');
-      } else if (cellDate < startDate) {
-        cell.classList.add('dim');
       } else {
         cell.classList.add('is-editable');
         cell.dataset.key = key;
@@ -1163,9 +1174,8 @@
       grid.appendChild(cell);
     }
 
-    var startMonth = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
     var currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    $('calPrevBtn').disabled = viewDate.getTime() <= startMonth.getTime();
+    $('calPrevBtn').disabled = false;
     $('calNextBtn').disabled = viewDate.getTime() >= currentMonthStart.getTime();
   }
 
@@ -1612,16 +1622,12 @@
     });
   }
 
-  // Corrects the CURRENT streak's start time. If a relapse is already on
-  // record, this replaces that entry rather than adding a new one — editing
-  // the date/time twice should not double-count as two relapses.
-  // Only reachable before a habit's first relapse — once there's history,
-  // the calendar is the direct way to add, move, or remove an entry.
+  // Moves the clean-since date. Only offered while the current streak counts
+  // from it; once a later relapse exists, the calendar handles edits.
   function correctTrackingStart(habitId, timestamp) {
     var habit = findHabit(habitId);
     if (!habit) return;
     habit.createdAt = timestamp;
-    habit.lastRelapseAt = null;
     resyncMilestonesHit(habit);
     saveData();
     if (state.screen === 'detail') renderDetail(habitId);
@@ -1674,10 +1680,6 @@
     var ts = parseDateTimeInputs($('relapseDate').value, $('relapseTime').value);
     if (isNaN(ts)) { errEl.textContent = 'Enter a date and time.'; return; }
     if (ts > Date.now()) { errEl.textContent = "That's in the future. Pick a time up to now."; return; }
-    if (ts < habit.createdAt) {
-      errEl.textContent = 'That is before you started tracking (' + formatDateTime(habit.createdAt) + ').';
-      return;
-    }
     closeSheet('relapseSheet');
     logRelapse(habit.id, ts);
   }
@@ -1704,6 +1706,10 @@
     var ts = parseDateTimeInputs($('lastRelapseDate').value, $('lastRelapseTime').value);
     if (isNaN(ts)) { errEl.textContent = 'Enter a date and time.'; return; }
     if (ts > Date.now()) { errEl.textContent = "That's in the future. Pick a time up to now."; return; }
+    if (habit.lastRelapseAt && ts <= habit.lastRelapseAt) {
+      errEl.textContent = 'That is before your relapse on ' + formatDateShort(habit.lastRelapseAt) + ', so the count would start there instead.';
+      return;
+    }
     correctTrackingStart(habit.id, ts);
     closeSheet('lastRelapseSheet');
     showToast('Start corrected.');
