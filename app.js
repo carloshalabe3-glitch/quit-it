@@ -443,6 +443,7 @@
   // ---------- app state ----------
 
   var state = {
+    detailTab: 'calendar',
     screen: 'lock',
     unlocked: false,
     preLockScreen: 'home',
@@ -870,6 +871,18 @@
     renderCalendar(habit);
     renderMilestoneList(habit);
     renderHistory(habit);
+    showDetailTab(state.detailTab);
+  }
+
+  function showDetailTab(name) {
+    state.detailTab = name;
+    document.querySelectorAll('#detailTabs .ledger-tab').forEach(function (t) {
+      t.classList.toggle('is-active', t.dataset.tab === name);
+      t.setAttribute('aria-selected', t.dataset.tab === name ? 'true' : 'false');
+    });
+    document.querySelectorAll('#detailScreen .detail-pane').forEach(function (p) {
+      p.classList.toggle('hidden', p.dataset.pane !== name);
+    });
   }
 
   function paintDetailFigures(habit) {
@@ -2199,6 +2212,11 @@
     $('relapseEarlierBtn').addEventListener('click', chooseRelapseEarlier);
     $('relapseSaveBtn').addEventListener('click', saveRelapseEarlier);
     $('relapseCancel').addEventListener('click', function () { closeSheet('relapseSheet'); });
+    document.querySelectorAll('#detailTabs .ledger-tab').forEach(function (t) {
+      t.addEventListener('click', function () {
+        if (state.detailTab !== t.dataset.tab) showDetailTab(t.dataset.tab);
+      });
+    });
     $('calPrevBtn').addEventListener('click', function () {
       state.calendarOffset -= 1;
       renderCalendar(findHabit(state.currentHabitId));

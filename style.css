@@ -554,6 +554,23 @@ ol, ul { margin: 0; padding: 0; list-style: none; }
 .section-head h2 { font-family: var(--serif); font-weight: 600; font-size: 1.05rem; letter-spacing: -0.01em; }
 .section-note { font-size: 0.75rem; color: var(--ink-3); text-align: right; }
 .section-foot { font-size: 0.8rem; color: var(--ink-3); line-height: 1.5; margin-top: 0.75rem; }
+.ledger-tabs { display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid var(--line); padding: 0 var(--pad); }
+.ledger-tab {
+  position: relative;
+  background: none;
+  border: none;
+  padding: 0.95rem 0.2rem 0.85rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink-3);
+  transition: color var(--t-fast);
+}
+.ledger-tab::after { content: ''; position: absolute; left: 18%; right: 18%; bottom: -1px; height: 2px; background: var(--ink); transform: scaleX(0); transition: transform var(--t-med) var(--ease-out); }
+.ledger-tab.is-active { color: var(--ink); }
+.ledger-tab.is-active::after { transform: scaleX(1); }
+.detail-pane { animation: paneIn var(--t-med) var(--ease-out) both; }
+.detail-pane .section-head:empty, .detail-pane .section-head:has(.section-note:empty) { display: none; }
+@keyframes paneIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 .section-quiet { display: flex; align-items: center; justify-content: center; gap: 0.6rem; padding: 1.5rem var(--pad) 2.5rem; border-bottom: none; }
 .dot-sep { color: var(--line-2); }
 .about-line { font-size: 0.78rem; color: var(--ink-3); }

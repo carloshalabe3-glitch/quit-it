@@ -200,15 +200,14 @@
       </div>
     </section>
 
-    <section class="section" id="patternsSection">
-      <div class="section-head">
-        <h2>Patterns</h2>
-        <span class="section-note" id="patternsNote"></span>
-      </div>
-      <div id="patternsBody"></div>
-    </section>
+    <nav class="ledger-tabs" id="detailTabs" role="tablist">
+      <button class="ledger-tab" data-tab="calendar" role="tab">Calendar</button>
+      <button class="ledger-tab" data-tab="patterns" role="tab">Patterns</button>
+      <button class="ledger-tab" data-tab="milestones" role="tab">Milestones</button>
+      <button class="ledger-tab" data-tab="history" role="tab">History</button>
+    </nav>
 
-    <section class="section">
+    <section class="section detail-pane" data-pane="calendar">
       <div class="section-head cal-head">
         <button class="cal-arrow" id="calPrevBtn" aria-label="Previous month"><svg><use href="#sym-back"/></svg></button>
         <h2 id="calMonthLabel"></h2>
@@ -219,12 +218,18 @@
       </div>
       <div class="cal-grid" id="calGrid"></div>
       <div class="cal-legend"><i class="cal-swatch cal-swatch-event"></i> Relapse <i class="cal-swatch cal-swatch-today"></i> Today</div>
-      <p class="field-hint">Tap any day to log a relapse there, or tap a marked day to remove it.</p>
+      <p class="field-hint">Tap a day to log or remove a relapse.</p>
     </section>
 
-    <section class="section">
+    <section class="section detail-pane hidden" data-pane="patterns" id="patternsSection">
       <div class="section-head">
-        <h2>Milestones</h2>
+        <span class="section-note" id="patternsNote"></span>
+      </div>
+      <div id="patternsBody"></div>
+    </section>
+
+    <section class="section detail-pane hidden" data-pane="milestones">
+      <div class="section-head">
         <span class="section-note">Reached once per streak</span>
       </div>
       <div id="milestoneListEl" class="milestone-list"></div>
@@ -235,9 +240,8 @@
       </div>
     </section>
 
-    <section class="section">
+    <section class="section detail-pane hidden" data-pane="history">
       <div class="section-head">
-        <h2>History</h2>
         <span class="section-note" id="historyNote"></span>
       </div>
       <div id="historyList" class="history-list"></div>
