@@ -1066,6 +1066,21 @@ ol, ul { margin: 0; padding: 0; list-style: none; }
 
 /* ---------- Reduced motion ---------- */
 
+/* ---------- Press feel ----------
+   Quick press in, a small settle on release. Quieter than a bounce:
+   the ledger stays calm, but every tap is answered. */
+
+.btn, .nav-btn, .ledger-tab, .text-link, .cal-arrow, .cal-cell.is-editable, .pin-key, .icon-opt, .choice, .settings-row, .habit-card {
+  transition-property: transform, background, color, border-color, opacity, text-decoration-color;
+  transition-duration: 380ms, 140ms, 140ms, 140ms, 140ms, 140ms;
+  transition-timing-function: cubic-bezier(0.3, 1.35, 0.5, 1), ease, ease, ease, ease, ease;
+}
+.btn:active, .choice:active, .settings-row:active { transform: scale(0.965); transition-duration: 80ms; }
+.nav-btn:active, .ledger-tab:active, .text-link:active, .icon-opt:active, .cal-arrow:active { transform: scale(0.92); transition-duration: 80ms; }
+.pin-key:active { transform: scale(0.93); transition-duration: 80ms; }
+.cal-cell.is-editable:active { transform: scale(0.84); transition-duration: 80ms; }
+.habit-card:active { transform: scale(0.985); transition-duration: 80ms; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.001ms !important;

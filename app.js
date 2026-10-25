@@ -2165,6 +2165,8 @@
   }
 
   function wire() {
+    // iOS Safari only shows :active press states when a touch listener exists.
+    document.addEventListener('touchstart', function () {}, { passive: true });
     wirePad('lock');
     wirePad('setup');
     wirePad('changePin');
