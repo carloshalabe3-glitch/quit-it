@@ -708,6 +708,7 @@
     state.unlocked = false;
     state.preLockScreen = state.screen;
     closeAllSheets();
+    document.querySelectorAll('.ctx-backdrop').forEach(function (n) { n.remove(); });
     stopBreathing();
     clearInterval(triggerTimerHandle);
     hideToast();
@@ -726,12 +727,22 @@
 
   // ---------- navigation ----------
 
-  function goToScreen(name, habitId, direction) {
+  // Detail and Settings add one history entry so Safari's swipe-back works;
+  // returning Home any other way pops it so history stays in step.
+  var SUB_SCREENS = { detail: true, overview: true };
+  var ignoreNextPop = false;
+
+  function goToScreen(name, habitId, direction, fromHistory) {
     var from = state.screen;
     state.screen = name;
     if (habitId) {
       if (habitId !== state.currentHabitId) state.calendarOffset = 0;
       state.currentHabitId = habitId;
+    }
+    if (!fromHistory) {
+      var inSub = history.state && history.state.sub;
+      if (SUB_SCREENS[name] && !inSub) history.pushState({ sub: true }, '');
+      else if (name === 'home' && inSub) { ignoreNextPop = true; history.back(); }
     }
     if (!direction) {
       if (name === 'detail' && from === 'home') direction = 'push';
@@ -743,6 +754,172 @@
     else if (name === 'overview') { renderOverview(); showScreenEl('overviewScreen', direction); }
     else if (name === 'trigger') { showScreenEl('triggerScreen'); }
     else if (name === 'onboard') { $('onboardDate').textContent = formatDateline(new Date()); showScreenEl('onboardScreen'); }
+  }
+
+  window.addEventListener('popstate', function () {
+    if (ignoreNextPop) { ignoreNextPop = false; return; }
+    if (history.state && history.state.sub) return;
+    // Going back while locked never skips the PIN; it just changes where unlocking lands.
+    if (!state.unlocked) { if (SUB_SCREENS[state.preLockScreen]) state.preLockScreen = 'home'; return; }
+    if (SUB_SCREENS[state.screen] || state.screen === 'trigger') goToScreen('home', null, 'pop', true);
+  });
+
+  // The installed home-screen app has no browser swipe-back, so drag from the left edge here.
+  function wireEdgeSwipe(screen) {
+    if (!window.navigator.standalone) return;
+    var tracking = false, locked = false, startX = 0, startY = 0, dx = 0;
+    screen.addEventListener('touchstart', function (e) {
+      if (!SUB_SCREENS[state.screen] || e.touches[0].clientX > 22) return;
+      tracking = true; locked = false; dx = 0;
+      startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+    }, { passive: true });
+    screen.addEventListener('touchmove', function (e) {
+      if (!tracking) return;
+      var mx = e.touches[0].clientX - startX, my = e.touches[0].clientY - startY;
+      if (!locked) {
+        if (Math.abs(mx) < 6 && Math.abs(my) < 6) return;
+        if (Math.abs(my) > Math.abs(mx)) { tracking = false; return; }
+        locked = true;
+        screen.classList.add('is-dragging');
+      }
+      e.preventDefault();
+      dx = Math.max(0, mx);
+      screen.style.transform = 'translateX(' + dx + 'px)';
+    }, { passive: false });
+    function end() {
+      if (!tracking) return;
+      tracking = false;
+      if (!locked) return;
+      screen.classList.remove('is-dragging');
+      if (dx > screen.offsetWidth * 0.33) {
+        screen.classList.add('is-leaving');
+        screen.style.transform = 'translateX(100%)';
+        setTimeout(function () {
+          screen.classList.remove('is-leaving');
+          screen.style.transform = '';
+          goToScreen('home');
+        }, 250);
+      } else {
+        screen.classList.add('is-settling');
+        screen.style.transform = '';
+        setTimeout(function () { screen.classList.remove('is-settling'); }, 280);
+      }
+    }
+    screen.addEventListener('touchend', end);
+    screen.addEventListener('touchcancel', end);
+  }
+
+  // Text follows the iPhone's text-size setting: Apple's body text is 17px at
+  // the default size, which maps to this app's 16px; scaled and capped.
+  function applyTextSize() {
+    if (!window.CSS || !CSS.supports('font', '-apple-system-body')) return;
+    var probe = document.createElement('div');
+    probe.style.cssText = 'font: -apple-system-body; position: absolute; visibility: hidden;';
+    document.body.appendChild(probe);
+    var px = parseFloat(getComputedStyle(probe).fontSize);
+    probe.remove();
+    if (!px) return;
+    var size = Math.min(21, Math.max(14, 16 * px / 17));
+    document.documentElement.style.fontSize = size + 'px';
+  }
+
+  function archiveHabit(habit) {
+    openConfirm('Archive this habit?', 'It leaves the ledger but keeps its full history. You can bring it back from Settings at any time.', function () {
+      habit.archived = true;
+      saveData();
+      closeConfirm();
+      goToScreen('home');
+      showToast('Archived ' + habit.name + '.', { action: 'Undo', onAction: function () {
+        habit.archived = false;
+        resyncMilestonesHit(habit);
+        saveData();
+        renderHome();
+      } });
+    }, 'Archive', 'btn-ink');
+  }
+
+  // ---------- press-and-hold menu ----------
+
+  var MENU_ICONS = {
+    relapse: '<path d="M4 12a8 8 0 108-8"/><path d="M4 4v4h4"/>',
+    card: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h5"/>',
+    edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>',
+    archive: '<rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a1 1 0 001 1h12a1 1 0 001-1V9"/><path d="M10 13h4"/>'
+  };
+
+  function attachHoldMenu(card, habit) {
+    var timer = null, sx = 0, sy = 0;
+    card.addEventListener('pointerdown', function (e) {
+      if (e.button !== 0) return;
+      delete card.dataset.longPressed;
+      sx = e.clientX; sy = e.clientY;
+      clearTimeout(timer);
+      timer = setTimeout(function () {
+        if (!state.unlocked || state.screen !== 'home') return;
+        card.dataset.longPressed = '1';
+        openHabitMenu(habit, card);
+      }, 480);
+    });
+    card.addEventListener('pointermove', function (e) {
+      if (Math.abs(e.clientX - sx) > 8 || Math.abs(e.clientY - sy) > 8) clearTimeout(timer);
+    });
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (t) {
+      card.addEventListener(t, function () { clearTimeout(timer); });
+    });
+    card.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  }
+
+  function openHabitMenu(habit, card) {
+    var items = [
+      { label: 'Log a relapse', icon: 'relapse', destructive: true, run: function () { state.currentHabitId = habit.id; openRelapseSheet(habit.id); } },
+      { label: 'Streak card', icon: 'card', run: function () { openStreakCard(habit.id); } },
+      { label: 'Edit', icon: 'edit', run: function () { openHabitSheet(habit.id); } },
+      { label: 'Archive', icon: 'archive', run: function () { archiveHabit(habit); } }
+    ];
+    var rect = card.getBoundingClientRect();
+    var backdrop = el('div', 'ctx-backdrop');
+    var preview = card.cloneNode(true);
+    preview.classList.add('ctx-preview');
+    preview.style.left = rect.left + 'px';
+    preview.style.top = rect.top + 'px';
+    preview.style.width = rect.width + 'px';
+    preview.style.height = rect.height + 'px';
+    preview.style.margin = '0';
+    backdrop.appendChild(preview);
+
+    var menu = el('div', 'ctx-menu');
+    menu.setAttribute('role', 'menu');
+    items.forEach(function (item) {
+      var b = el('button', 'ctx-item' + (item.destructive ? ' is-destructive' : ''));
+      b.type = 'button';
+      b.setAttribute('role', 'menuitem');
+      b.appendChild(el('span', '', item.label));
+      b.insertAdjacentHTML('beforeend', '<svg viewBox="0 0 24 24">' + MENU_ICONS[item.icon] + '</svg>');
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        close();
+        setTimeout(item.run, 120);
+      });
+      menu.appendChild(b);
+    });
+    backdrop.appendChild(menu);
+    document.body.appendChild(backdrop);
+
+    var menuH = menu.offsetHeight;
+    var below = rect.bottom + 12 + menuH < window.innerHeight - 16;
+    menu.style.left = Math.max(12, Math.min(rect.left, window.innerWidth - menu.offsetWidth - 12)) + 'px';
+    menu.style.top = (below ? rect.bottom + 12 : Math.max(12, rect.top - menuH - 12)) + 'px';
+    menu.style.transformOrigin = below ? 'top left' : 'bottom left';
+    requestAnimationFrame(function () { backdrop.classList.add('is-open'); });
+
+    function close() {
+      backdrop.classList.remove('is-open');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { backdrop.remove(); }, 220);
+    }
+    function onKey(e) { if (e.key === 'Escape') close(); }
+    backdrop.addEventListener('click', close);
+    document.addEventListener('keydown', onKey);
   }
 
   // ---------- home ----------
@@ -802,7 +979,11 @@
       prog.appendChild(nextLabel);
       card.appendChild(prog);
 
-      card.addEventListener('click', function () { goToScreen('detail', habit.id); });
+      attachHoldMenu(card, habit);
+      card.addEventListener('click', function () {
+        if (card.dataset.longPressed) { delete card.dataset.longPressed; return; }
+        goToScreen('detail', habit.id);
+      });
 
       listEl.appendChild(card);
       homeRefs[habit.id] = { numEl: numEl, unitEl: unitEl, bestEl: bestEl, fill: fill, nextLabel: nextLabel };
@@ -1573,7 +1754,8 @@
       habit.why = why;
       saveData();
       closeSheet('habitSheet');
-      renderDetail(habit.id);
+      if (state.screen === 'detail') renderDetail(habit.id);
+      else renderHome();
       showToast('Saved.');
     } else {
       var since = parseDateTimeInputs($('habitSinceDate').value, $('habitSinceTime').value);
@@ -2169,6 +2351,10 @@
   function wire() {
     // iOS Safari only shows :active press states when a touch listener exists.
     document.addEventListener('touchstart', function () {}, { passive: true });
+    applyTextSize();
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) applyTextSize(); });
+    wireEdgeSwipe($('detailScreen'));
+    wireEdgeSwipe($('overviewScreen'));
     wirePad('lock');
     wirePad('setup');
     wirePad('changePin');
@@ -2263,19 +2449,7 @@
     $('triggerBtn').addEventListener('click', openTrigger);
     $('archiveBtn').addEventListener('click', function () {
       var habit = findHabit(state.currentHabitId);
-      if (!habit) return;
-      openConfirm('Archive this habit?', 'It leaves the ledger but keeps its full history. You can bring it back from Settings at any time.', function () {
-        habit.archived = true;
-        saveData();
-        closeConfirm();
-        goToScreen('home');
-        showToast('Archived ' + habit.name + '.', { action: 'Undo', onAction: function () {
-          habit.archived = false;
-          resyncMilestonesHit(habit);
-          saveData();
-          renderHome();
-        } });
-      }, 'Archive', 'btn-ink');
+      if (habit) archiveHabit(habit);
     });
     $('deleteBtn').addEventListener('click', function () {
       var habit = findHabit(state.currentHabitId);
