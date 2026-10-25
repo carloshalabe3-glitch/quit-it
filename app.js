@@ -2,6 +2,8 @@
   'use strict';
 
   var STORAGE_KEY = 'ledger.v1';
+  var CARD_SERIF = 'ui-serif, "New York", "Iowan Old Style", Georgia, serif';
+  var CARD_SANS = '-apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Roboto, sans-serif';
   var PIN_SALT = 'ledger-app-salt-v1';
   var APP_VERSION = '2.0';
 
@@ -1330,24 +1332,24 @@
 
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
-    ctx.font = '700 44px "Fraunces"';
+    ctx.font = '700 44px ' + CARD_SERIF;
     ctx.fillText('Quit it', margin, 130);
 
     ctx.textAlign = 'right';
-    ctx.font = '500 26px "Work Sans"';
+    ctx.font = '500 26px ' + CARD_SANS;
     ctx.fillStyle = '#8F8B80';
     ctx.fillText(new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' }), size - margin, 130);
 
     // eyebrow
     ctx.textAlign = 'left';
     ctx.fillStyle = '#8F8B80';
-    ctx.font = '600 26px "Work Sans"';
+    ctx.font = '600 26px ' + CARD_SANS;
     var eyebrow = 'TIME CLEAN';
     drawTracked(ctx, eyebrow, margin, 260, 4);
 
     // habit name
     ctx.fillStyle = '#1A1A1A';
-    ctx.font = '600 52px "Fraunces"';
+    ctx.font = '600 52px ' + CARD_SERIF;
     ctx.fillText(fitText(ctx, habit.name, size - margin * 2), margin, 330);
 
     // number
@@ -1356,13 +1358,13 @@
     var numSize = 400;
     if (numText.length >= 4) numSize = 270;
     else if (numText.length === 3) numSize = 330;
-    ctx.font = '700 ' + numSize + 'px "Fraunces"';
+    ctx.font = '700 ' + numSize + 'px ' + CARD_SERIF;
     ctx.textBaseline = 'alphabetic';
     var numY = 740;
     ctx.fillText(numText, margin - 14, numY);
     var numW = ctx.measureText(numText).width;
 
-    ctx.font = '500 46px "Work Sans"';
+    ctx.font = '500 46px ' + CARD_SANS;
     ctx.fillStyle = '#5E5B52';
     ctx.fillText(parts.unit + ' clean', margin + numW + 6, numY);
 
@@ -1373,23 +1375,23 @@
     // footer figures
     var footY = numY + 136;
     ctx.fillStyle = '#8F8B80';
-    ctx.font = '600 24px "Work Sans"';
+    ctx.font = '600 24px ' + CARD_SANS;
     drawTracked(ctx, 'BEST STREAK', margin, footY, 4);
     drawTracked(ctx, 'RELAPSES LOGGED', size / 2 + 40, footY, 4);
 
     var bp = figureParts(bestStreakMs(habit));
     ctx.fillStyle = '#1A1A1A';
-    ctx.font = '700 64px "Fraunces"';
+    ctx.font = '700 64px ' + CARD_SERIF;
     ctx.fillText(bp.value, margin, footY + 80);
     var bw = ctx.measureText(bp.value).width;
     ctx.fillText(String(habit.relapses.length), size / 2 + 40, footY + 80);
-    ctx.font = '500 28px "Work Sans"';
+    ctx.font = '500 28px ' + CARD_SANS;
     ctx.fillStyle = '#5E5B52';
     ctx.fillText(bp.unit, margin + bw + 14, footY + 80);
 
     // footer
     ctx.fillStyle = '#8F8B80';
-    ctx.font = '500 24px "Work Sans"';
+    ctx.font = '500 24px ' + CARD_SANS;
     ctx.textAlign = 'right';
     ctx.fillText('Kept privately, on one phone.', size - margin, size - 56);
 

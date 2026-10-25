@@ -5,8 +5,6 @@ var ASSETS = [
   './style.css',
   './app.js',
   './manifest.json',
-  './fonts/fraunces-variable.woff2',
-  './fonts/worksans-variable.woff2',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-180.png',

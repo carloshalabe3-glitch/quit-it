@@ -4,22 +4,6 @@
    No gradients, no shadows, no arrows. Rules and type do the work.
    ================================================================ */
 
-@font-face {
-  font-family: 'Fraunces';
-  font-weight: 500 700;
-  font-style: normal;
-  font-display: swap;
-  src: url('fonts/fraunces-variable.woff2') format('woff2-variations'), url('fonts/fraunces-variable.woff2') format('woff2');
-}
-
-@font-face {
-  font-family: 'Work Sans';
-  font-weight: 400 600;
-  font-style: normal;
-  font-display: swap;
-  src: url('fonts/worksans-variable.woff2') format('woff2-variations'), url('fonts/worksans-variable.woff2') format('woff2');
-}
-
 :root {
   --paper: #F7F4EC;
   --paper-2: #EFEBDF;
@@ -42,8 +26,9 @@
   --dark-ink: #F7F4EC;
   --dark-ink-2: rgba(247, 244, 236, 0.62);
 
-  --serif: 'Fraunces', Georgia, 'Iowan Old Style', serif;
-  --sans: 'Work Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  /* Apple's New York serif and San Francisco, both built into Apple devices. */
+  --serif: ui-serif, 'New York', 'Iowan Old Style', Georgia, serif;
+  --sans: -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', Roboto, sans-serif;
 
   --r-s: 6px;
   --r-m: 10px;
