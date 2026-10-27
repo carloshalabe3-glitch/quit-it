@@ -529,7 +529,16 @@
       $('lockError').textContent = '';
       showScreenEl('lockScreen');
       refreshLockout();
+      drawLockMark();
     }
+  }
+
+  // Restart the pen-stroke animation; called whenever the lock screen is actually in view.
+  function drawLockMark() {
+    var mark = $('lockMark');
+    mark.classList.remove('is-drawing');
+    void mark.getBoundingClientRect();
+    mark.classList.add('is-drawing');
   }
 
   function renderPinDots(containerId, filledCount, errorMode) {
@@ -746,6 +755,7 @@
 
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) relock();
+    else if (state.screen === 'lock') drawLockMark();
   });
 
   // ---------- navigation ----------
