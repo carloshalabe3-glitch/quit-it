@@ -468,6 +468,9 @@
   var screens = ['lockScreen', 'setupScreen', 'onboardScreen', 'homeScreen', 'detailScreen', 'overviewScreen', 'triggerScreen'];
 
   function showScreenEl(id, direction) {
+    // Coming back to Home doesn't replay its entrance; after an edge swipe nothing animates at all.
+    document.body.classList.toggle('instant', direction === 'instant');
+    document.body.classList.toggle('returning', direction === 'pop' || direction === 'instant');
     screens.forEach(function (s) {
       var node = $(s);
       var show = s === id;
@@ -761,49 +764,73 @@
     if (history.state && history.state.sub) return;
     // Going back while locked never skips the PIN; it just changes where unlocking lands.
     if (!state.unlocked) { if (SUB_SCREENS[state.preLockScreen]) state.preLockScreen = 'home'; return; }
-    if (SUB_SCREENS[state.screen] || state.screen === 'trigger') goToScreen('home', null, 'pop', true);
+    // Safari already animated its own swipe-back, so land on Home without another animation.
+    if (SUB_SCREENS[state.screen] || state.screen === 'trigger') goToScreen('home', null, 'instant', true);
   });
 
   // The installed home-screen app has no browser swipe-back, so drag from the left edge here.
+  // Like iOS, Home is already drawn underneath and slides in with a slight parallax.
   function wireEdgeSwipe(screen) {
     if (!window.navigator.standalone) return;
-    var tracking = false, locked = false, startX = 0, startY = 0, dx = 0;
+    var under = null;
+    var tracking = false, locked = false, startX = 0, startY = 0, dx = 0, lastX = 0, lastT = 0, speed = 0;
+
+    function paint(p) {
+      screen.style.transform = 'translateX(' + (p * 100) + '%)';
+      under.style.transform = 'translateX(' + (-30 + 30 * p) + '%)';
+      under.style.setProperty('--shade', String(0.2 * (1 - p)));
+    }
+    function cleanup() {
+      screen.classList.remove('is-dragging', 'is-settling', 'is-leaving');
+      screen.style.transform = '';
+      if (under) {
+        under.classList.remove('is-under', 'is-settling', 'is-leaving');
+        under.style.transform = '';
+        under.style.removeProperty('--shade');
+      }
+      under = null;
+    }
+
     screen.addEventListener('touchstart', function (e) {
-      if (!SUB_SCREENS[state.screen] || e.touches[0].clientX > 22) return;
-      tracking = true; locked = false; dx = 0;
-      startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+      if (!SUB_SCREENS[state.screen] || under || e.touches[0].clientX > 22) return;
+      tracking = true; locked = false; dx = 0; speed = 0;
+      startX = lastX = e.touches[0].clientX; startY = e.touches[0].clientY; lastT = e.timeStamp;
     }, { passive: true });
     screen.addEventListener('touchmove', function (e) {
       if (!tracking) return;
-      var mx = e.touches[0].clientX - startX, my = e.touches[0].clientY - startY;
+      var x = e.touches[0].clientX;
+      var mx = x - startX, my = e.touches[0].clientY - startY;
       if (!locked) {
         if (Math.abs(mx) < 6 && Math.abs(my) < 6) return;
         if (Math.abs(my) > Math.abs(mx)) { tracking = false; return; }
         locked = true;
+        renderHome();
+        under = $('homeScreen');
+        document.body.classList.add('instant');
+        under.classList.add('is-under');
         screen.classList.add('is-dragging');
       }
       e.preventDefault();
+      if (e.timeStamp > lastT) speed = (x - lastX) / (e.timeStamp - lastT);
+      lastX = x; lastT = e.timeStamp;
       dx = Math.max(0, mx);
-      screen.style.transform = 'translateX(' + dx + 'px)';
+      paint(Math.min(1, dx / screen.offsetWidth));
     }, { passive: false });
+
     function end() {
       if (!tracking) return;
       tracking = false;
       if (!locked) return;
+      var commit = dx > screen.offsetWidth * 0.35 || (speed > 0.45 && dx > 30);
       screen.classList.remove('is-dragging');
-      if (dx > screen.offsetWidth * 0.33) {
-        screen.classList.add('is-leaving');
-        screen.style.transform = 'translateX(100%)';
-        setTimeout(function () {
-          screen.classList.remove('is-leaving');
-          screen.style.transform = '';
-          goToScreen('home');
-        }, 250);
-      } else {
-        screen.classList.add('is-settling');
-        screen.style.transform = '';
-        setTimeout(function () { screen.classList.remove('is-settling'); }, 280);
-      }
+      screen.classList.add(commit ? 'is-leaving' : 'is-settling');
+      under.classList.add(commit ? 'is-leaving' : 'is-settling');
+      paint(commit ? 1 : 0);
+      setTimeout(function () {
+        cleanup();
+        if (commit) goToScreen('home', null, 'instant');
+        else document.body.classList.remove('instant');
+      }, 260);
     }
     screen.addEventListener('touchend', end);
     screen.addEventListener('touchcancel', end);
@@ -869,6 +896,23 @@
     card.addEventListener('contextmenu', function (e) { e.preventDefault(); });
   }
 
+  // Preview and menu share one width and stack as a group, kept on screen,
+  // starting near where the finger pressed; the preview glides there from the original row.
+  function placeMenu(preview, menu, rect) {
+    var w = Math.min(window.innerWidth - 32, 528);
+    var left = (window.innerWidth - w) / 2;
+    preview.style.width = menu.style.width = w + 'px';
+    preview.style.left = menu.style.left = left + 'px';
+    var gap = 10;
+    var pH = preview.offsetHeight, mH = menu.offsetHeight;
+    var topMin = 16 + (parseFloat(getComputedStyle(document.body).paddingTop) || 0);
+    var top = Math.max(topMin, Math.min(rect.top, window.innerHeight - pH - gap - mH - 24));
+    preview.style.top = top + 'px';
+    menu.style.top = (top + pH + gap) + 'px';
+    preview.style.transform = 'translateY(' + (rect.top - top) + 'px) scale(0.96)';
+    void preview.offsetWidth;
+  }
+
   function openHabitMenu(habit, card) {
     var items = [
       { label: 'Log a relapse', icon: 'relapse', destructive: true, run: function () { state.currentHabitId = habit.id; openRelapseSheet(habit.id); } },
@@ -878,13 +922,11 @@
     ];
     var rect = card.getBoundingClientRect();
     var backdrop = el('div', 'ctx-backdrop');
-    var preview = card.cloneNode(true);
-    preview.classList.add('ctx-preview');
-    preview.style.left = rect.left + 'px';
-    preview.style.top = rect.top + 'px';
-    preview.style.width = rect.width + 'px';
-    preview.style.height = rect.height + 'px';
-    preview.style.margin = '0';
+    // The preview is always the full list-style row (even from grid view), so nothing gets cut off.
+    var preview = el('div', 'ctx-preview');
+    var clone = card.cloneNode(true);
+    clone.removeAttribute('style');
+    preview.appendChild(clone);
     backdrop.appendChild(preview);
 
     var menu = el('div', 'ctx-menu');
@@ -904,13 +946,11 @@
     });
     backdrop.appendChild(menu);
     document.body.appendChild(backdrop);
-
-    var menuH = menu.offsetHeight;
-    var below = rect.bottom + 12 + menuH < window.innerHeight - 16;
-    menu.style.left = Math.max(12, Math.min(rect.left, window.innerWidth - menu.offsetWidth - 12)) + 'px';
-    menu.style.top = (below ? rect.bottom + 12 : Math.max(12, rect.top - menuH - 12)) + 'px';
-    menu.style.transformOrigin = below ? 'top left' : 'bottom left';
-    requestAnimationFrame(function () { backdrop.classList.add('is-open'); });
+    placeMenu(preview, menu, rect);
+    requestAnimationFrame(function () {
+      backdrop.classList.add('is-open');
+      preview.style.transform = '';
+    });
 
     function close() {
       backdrop.classList.remove('is-open');

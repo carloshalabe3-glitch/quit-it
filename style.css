@@ -1079,8 +1079,28 @@ ol, ul { margin: 0; padding: 0; list-style: none; }
 
 /* ---------- iOS navigation: slide in, drag from the edge to go back ---------- */
 
-.screen.is-dragging, .screen.is-settling, .screen.is-leaving { animation: none !important; }
-.screen.is-dragging { box-shadow: -14px 0 32px -12px rgba(0, 0, 0, 0.25); }
+.screen.is-dragging, .screen.is-settling, .screen.is-leaving { animation: none !important; position: relative; z-index: 1; background: var(--paper); box-shadow: -14px 0 32px -12px rgba(0, 0, 0, 0.3); will-change: transform; }
+
+/* Home, drawn underneath during an edge swipe. */
+.screen.is-under {
+  display: flex !important;
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  padding-top: env(safe-area-inset-top);
+  background: var(--paper);
+  animation: none !important;
+  will-change: transform;
+}
+.screen.is-under::after { content: ''; position: absolute; inset: 0; background: #000; opacity: var(--shade, 0); pointer-events: none; }
+.screen.is-under.is-settling, .screen.is-under.is-leaving { transition: transform 260ms cubic-bezier(0.2, 0.9, 0.25, 1); }
+.screen.is-under.is-settling::after, .screen.is-under.is-leaving::after { transition: opacity 260ms; }
+
+/* Coming back to Home doesn't replay its entrance animations. */
+body.instant .screen, body.instant .habit-card, body.instant .empty-state { animation: none !important; }
+body.returning .habit-card, body.returning .empty-state { animation: none; }
 .screen.is-settling, .screen.is-leaving { transition: transform 260ms cubic-bezier(0.2, 0.9, 0.25, 1); }
 
 /* ---------- Press-and-hold menu ---------- */
@@ -1097,8 +1117,8 @@ ol, ul { margin: 0; padding: 0; list-style: none; }
   transition: opacity 200ms;
 }
 .ctx-backdrop.is-open { opacity: 1; }
-.ctx-preview { position: fixed; pointer-events: none; background: var(--paper); border: 1px solid var(--line-2); border-radius: var(--r-m); transition: transform 280ms cubic-bezier(0.3, 1.35, 0.5, 1); }
-.ctx-backdrop.is-open .ctx-preview { transform: scale(1.02); }
+.ctx-preview { position: fixed; pointer-events: none; background: var(--paper); border: 1px solid var(--line-2); border-radius: var(--r-m); overflow: hidden; transform-origin: top center; transition: transform 320ms cubic-bezier(0.3, 1.25, 0.5, 1); }
+.ctx-preview > .habit-card { width: 100%; border-bottom: none; animation: none; }
 .ctx-menu {
   position: fixed;
   min-width: 220px;
@@ -1108,8 +1128,8 @@ ol, ul { margin: 0; padding: 0; list-style: none; }
   overflow: hidden;
   transform: scale(0.7);
   opacity: 0;
-  transform-origin: top left;
-  transition: transform 260ms cubic-bezier(0.3, 1.35, 0.5, 1), opacity 140ms;
+  transform-origin: top center;
+  transition: transform 260ms 40ms cubic-bezier(0.3, 1.35, 0.5, 1), opacity 140ms 40ms;
 }
 .ctx-backdrop.is-open .ctx-menu { transform: none; opacity: 1; }
 .ctx-item {
