@@ -137,6 +137,7 @@
       <p class="quote-text" id="quoteText"></p>
       <p class="quote-author" id="quoteAuthor"></p>
     </div>
+    <p class="home-tip field-hint hidden" id="homeTip">Hold a habit for quick actions.</p>
     <div id="habitList" class="habit-list"></div>
     <div id="emptyState" class="empty-state hidden">
       <p class="empty-title">Nothing on the ledger right now.</p>
@@ -219,7 +220,7 @@
       </div>
       <div class="cal-grid" id="calGrid"></div>
       <div class="cal-legend"><i class="cal-swatch cal-swatch-event"></i> Relapse <i class="cal-swatch cal-swatch-today"></i> Today</div>
-      <p class="field-hint">Tap a day to log or remove a relapse.</p>
+      <p class="field-hint" id="calTip">Tap a day to log or remove a relapse.</p>
     </section>
 
     <section class="section detail-pane hidden" data-pane="patterns" id="patternsSection">
@@ -324,11 +325,11 @@
 
       <div class="trigger-mode hidden" id="triggerBreathMode">
         <div class="breath-stage">
-          <div class="breath-ring" id="breathRing"><div class="breath-core"></div></div>
+          <button type="button" class="breath-ring" id="breathRing" aria-label="Hold to breathe"><span class="breath-core"></span></button>
           <div class="breath-phase" id="breathPhase">Get ready</div>
           <div class="breath-count" id="breathCount"></div>
         </div>
-        <div class="breath-hint">Four seconds in, hold, out, hold. Four rounds.</div>
+        <div class="breath-hint" id="breathTip">Keep your thumb on the circle. In as it grows, out as it shrinks.</div>
       </div>
     </div>
 
@@ -365,7 +366,7 @@
     <div class="field">
       <label for="habitWhyInput">Why you&rsquo;re quitting <span class="opt">optional</span></label>
       <textarea id="habitWhyInput" rows="2" maxlength="160" placeholder="In your own words."></textarea>
-      <p class="field-hint">Shown back to you, and only you, when you tap &ldquo;I&rsquo;m triggered&rdquo;.</p>
+      <p class="field-hint" id="whyTip">Shown back to you, and only you, when you tap &ldquo;I&rsquo;m triggered&rdquo;.</p>
     </div>
     <div class="field" id="habitSinceField">
       <label>Clean since</label>
@@ -373,7 +374,7 @@
         <input type="date" id="habitSinceDate" aria-label="Date">
         <input type="time" id="habitSinceTime" aria-label="Time">
       </div>
-      <p class="field-hint">Leave as is to count from now. Set it earlier if you already stopped.</p>
+      <p class="field-hint" id="sinceTip">Leave as is to count from now. Set it earlier if you already stopped.</p>
     </div>
     <div id="habitSheetError" class="form-error" role="alert"></div>
     <div class="sheet-actions">

@@ -363,6 +363,26 @@
     return d.getTime();
   }
 
+  // ---------- tips (each one shows for the first few visits, then goes quiet) ----------
+
+  var TIPS_KEY = 'ledger.tips';
+  var TIP_SESSIONS = 3;
+  var tipCounts = (function () { try { return JSON.parse(localStorage.getItem(TIPS_KEY)) || {}; } catch (e) { return {}; } })();
+  var tipsThisSession = {};
+
+  function useTip(key) {
+    if (tipsThisSession[key]) return true;
+    if ((tipCounts[key] || 0) >= TIP_SESSIONS) return false;
+    tipsThisSession[key] = true;
+    tipCounts[key] = (tipCounts[key] || 0) + 1;
+    try { localStorage.setItem(TIPS_KEY, JSON.stringify(tipCounts)); } catch (e) {}
+    return true;
+  }
+
+  function showTip(node, key, when) {
+    node.classList.toggle('hidden', !(when !== false && useTip(key)));
+  }
+
   function el(tag, cls, text) {
     var e = document.createElement(tag);
     if (cls) e.className = cls;
@@ -981,6 +1001,8 @@
     $('viewToggleBtn').textContent = data.viewMode === 'grid' ? 'List' : 'Grid';
     $('viewToggleBtn').classList.toggle('hidden', list.length < 2);
 
+    showTip($('homeTip'), 'home-hold', list.length > 0);
+
     if (list.length === 0) {
       emptyEl.classList.remove('hidden');
       $('homeBottomBar').classList.add('hidden');
@@ -1092,6 +1114,7 @@
 
     renderPatterns(habit);
     renderCalendar(habit);
+    showTip($('calTip'), 'calendar');
     renderMilestoneList(habit);
     renderHistory(habit);
     showDetailTab(state.detailTab);
@@ -1287,7 +1310,7 @@
     }
 
     block.appendChild(svg);
-    tip.textContent = 'Dashed line marks your best: ' + formatDuration(best) + '. Tap a bar for details.';
+    tip.textContent = 'Dashed line marks your best: ' + formatDuration(best) + '.' + (useTip('pattern-bars') ? ' Tap a bar for details.' : '');
     block.appendChild(tip);
     return block;
   }
@@ -1665,7 +1688,7 @@
         $('cardDownloadLink').classList.toggle('hidden', !canShare);
         $('cardHint').textContent = canShare
           ? 'Only what you see here goes in the image. Nothing else.'
-          : 'Only what you see here goes in the image. On iPhone, you can also press and hold it to save.';
+          : 'Only what you see here goes in the image.' + (useTip('card-save') ? ' On iPhone, you can also press and hold it to save.' : '');
       }, 'image/png');
     });
     openSheet('cardSheet');
@@ -1751,6 +1774,8 @@
       $('habitSinceDate').max = dateInputValue(now);
       $('habitSinceTime').value = timeInputValue(now);
     }
+    showTip($('whyTip'), 'habit-why');
+    if (!habit) showTip($('sinceTip'), 'habit-since');
     openSheet('habitSheet');
     setTimeout(function () { $('habitNameInput').focus(); }, 380);
   }
@@ -2092,61 +2117,96 @@
     $('triggerBreathActions').classList.toggle('hidden', !breathing);
   }
 
-  // --- box breathing: 4 in, 4 hold, 4 out, 4 hold, four rounds ---
+  // --- hold-to-breathe: box breathing that only moves while your thumb is on the circle ---
+  // 4s in, 4s hold, 4s out, 4s hold, four rounds. Letting go pauses it exactly where it is.
 
-  var breathTimers = [];
-  var breathing = false;
   var BREATH_PHASES = [
-    { cls: 'is-in', label: 'Breathe in' },
-    { cls: 'is-hold-in', label: 'Hold' },
-    { cls: 'is-out', label: 'Breathe out' },
-    { cls: 'is-hold-out', label: 'Hold' }
+    { label: 'Breathe in', from: 1, to: 2.3 },
+    { label: 'Hold', from: 2.3, to: 2.3 },
+    { label: 'Breathe out', from: 2.3, to: 1 },
+    { label: 'Hold', from: 1, to: 1 }
   ];
   var BREATH_ROUNDS = 4;
-  var BREATH_SECONDS = 4;
+  var BREATH_PHASE_MS = 4000;
+  var breath = null;
 
   function startBreathing() {
     stopBreathing();
-    breathing = true;
+    breath = { elapsed: 0, holding: false, last: 0, raf: 0, done: false };
     showTriggerMode('breathe');
-    var ring = $('breathRing');
-    ring.className = 'breath-ring';
-    $('breathPhase').textContent = 'Get ready';
-    $('breathCount').textContent = '';
-    var t = 900;
-    for (var round = 0; round < BREATH_ROUNDS; round++) {
-      BREATH_PHASES.forEach(function (phase, pi) {
-        var r = round;
-        breathTimers.push(setTimeout(function () {
-          ring.className = 'breath-ring ' + phase.cls;
-          $('breathPhase').textContent = phase.label;
-          $('breathCount').textContent = 'Round ' + (r + 1) + ' of ' + BREATH_ROUNDS;
-        }, t));
-        for (var s = 1; s <= BREATH_SECONDS; s++) {
-          (function (sec) {
-            breathTimers.push(setTimeout(function () {
-              $('breathCount').textContent = 'Round ' + (r + 1) + ' of ' + BREATH_ROUNDS + ' · ' + sec;
-            }, t + sec * 1000 - 1000));
-          })(s);
-        }
-        t += BREATH_SECONDS * 1000;
-      });
-    }
-    breathTimers.push(setTimeout(function () {
-      ring.className = 'breath-ring';
-      $('breathPhase').textContent = 'Done';
-      $('breathCount').textContent = 'A minute, well spent.';
-      $('breathStopBtn').textContent = 'Back';
-    }, t));
+    showTip($('breathTip'), 'breath');
+    paintBreath();
   }
 
   function stopBreathing() {
-    breathTimers.forEach(clearTimeout);
-    breathTimers = [];
-    if (!breathing) return;
-    breathing = false;
+    if (!breath) return;
+    cancelAnimationFrame(breath.raf);
+    breath = null;
+    $('breathRing').classList.remove('is-holding', 'is-done');
     $('breathStopBtn').textContent = 'Stop';
     showTriggerMode('idea');
+  }
+
+  function breathEase(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
+
+  function paintBreath() {
+    var ring = $('breathRing');
+    var core = ring.querySelector('.breath-core');
+    var total = BREATH_PHASES.length * BREATH_ROUNDS * BREATH_PHASE_MS;
+    if (breath.elapsed >= total) {
+      breath.done = true;
+      breath.holding = false;
+      ring.classList.remove('is-holding');
+      ring.classList.add('is-done');
+      core.style.transform = 'scale(1)';
+      $('breathPhase').textContent = 'Done';
+      $('breathCount').textContent = 'A minute, well spent.';
+      $('breathStopBtn').textContent = 'Back';
+      return;
+    }
+    var idx = Math.floor(breath.elapsed / BREATH_PHASE_MS);
+    var phase = BREATH_PHASES[idx % BREATH_PHASES.length];
+    var within = (breath.elapsed % BREATH_PHASE_MS) / BREATH_PHASE_MS;
+    core.style.transform = 'scale(' + (phase.from + (phase.to - phase.from) * breathEase(within)) + ')';
+    if (!breath.holding) {
+      $('breathPhase').textContent = breath.elapsed ? 'Paused' : 'Hold the circle';
+      $('breathCount').textContent = breath.elapsed ? 'Hold to keep going' : '';
+      return;
+    }
+    var round = Math.floor(idx / BREATH_PHASES.length) + 1;
+    $('breathPhase').textContent = phase.label;
+    $('breathCount').textContent = 'Round ' + round + ' of ' + BREATH_ROUNDS + ' · ' + Math.ceil((1 - within) * BREATH_PHASE_MS / 1000);
+  }
+
+  function breathTick(now) {
+    if (!breath || !breath.holding) return;
+    breath.elapsed += Math.min(now - breath.last, 100);
+    breath.last = now;
+    paintBreath();
+    if (breath && breath.holding) breath.raf = requestAnimationFrame(breathTick);
+  }
+
+  function wireBreathRing() {
+    var ring = $('breathRing');
+    ring.addEventListener('pointerdown', function (e) {
+      if (!breath || breath.done) return;
+      try { ring.setPointerCapture(e.pointerId); } catch (err) {}
+      breath.holding = true;
+      breath.last = performance.now();
+      ring.classList.add('is-holding');
+      paintBreath();
+      breath.raf = requestAnimationFrame(breathTick);
+    });
+    function release() {
+      if (!breath || !breath.holding) return;
+      breath.holding = false;
+      cancelAnimationFrame(breath.raf);
+      ring.classList.remove('is-holding');
+      paintBreath();
+    }
+    ring.addEventListener('pointerup', release);
+    ring.addEventListener('pointercancel', release);
+    ring.addEventListener('contextmenu', function (e) { e.preventDefault(); });
   }
 
   // ---------- milestones ----------
@@ -2526,6 +2586,7 @@
     $('triggerRerollBtn').addEventListener('click', rerollTrigger);
     $('triggerBreatheBtn').addEventListener('click', startBreathing);
     $('breathStopBtn').addEventListener('click', stopBreathing);
+    wireBreathRing();
     $('triggerOkayBtn').addEventListener('click', closeTrigger);
     $('triggerCloseBtn').addEventListener('click', closeTrigger);
 

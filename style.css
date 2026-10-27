@@ -780,6 +780,7 @@ ol, ul { margin: 0; padding: 0; list-style: none; }
 .field label .opt { color: var(--ink-3); font-weight: 500; }
 .field-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem; }
 .field-hint { font-size: 0.78rem; color: var(--ink-3); margin-top: 0.45rem; line-height: 1.45; }
+.home-tip { margin: 0 0 0.75rem; text-align: center; }
 
 .field input[type="text"],
 .field input[type="date"],
@@ -959,22 +960,29 @@ ol, ul { margin: 0; padding: 0; list-style: none; }
   height: 190px;
   border-radius: 50%;
   border: 1.5px solid var(--dark-line);
+  background: none;
+  padding: 0;
+  color: inherit;
   display: flex;
   align-items: center;
   justify-content: center;
+  touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  transition: border-color 200ms, transform 380ms cubic-bezier(0.3, 1.35, 0.5, 1);
 }
+.breath-ring.is-holding { border-color: var(--mustard); transform: scale(0.98); transition-duration: 200ms, 120ms; }
+.breath-ring.is-done { border-color: var(--dark-line); }
 .breath-core {
+  display: block;
   width: 40%;
   height: 40%;
   border-radius: 50%;
   background: var(--mustard);
   transform: scale(1);
-  transition: transform 4s var(--ease-in-out);
+  will-change: transform;
 }
-.breath-ring.is-in .breath-core { transform: scale(2.3); }
-.breath-ring.is-hold-in .breath-core { transform: scale(2.3); }
-.breath-ring.is-out .breath-core { transform: scale(1); }
-.breath-ring.is-hold-out .breath-core { transform: scale(1); }
 
 .breath-phase { font-family: var(--serif); font-size: 1.6rem; font-weight: 500; letter-spacing: -0.01em; min-height: 1.2em; }
 .breath-count { font-size: 0.85rem; color: var(--dark-ink-2); font-variant-numeric: tabular-nums; min-height: 1.2em; }
@@ -1172,7 +1180,6 @@ body.returning .habit-card, body.returning .empty-state { animation: none; }
     animation-delay: 0ms !important;
     transition-duration: 0.001ms !important;
   }
-  .breath-core { transition-duration: 4s !important; }
   .milestone-rule { width: 100%; }
 }
 
