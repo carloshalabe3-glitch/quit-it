@@ -2631,9 +2631,23 @@
   initLockFlow();
 
   if ('serviceWorker' in navigator) {
+    // When a new version takes over, reload once so it's used right away
+    // instead of only after the app is closed and reopened again.
+    var hadController = !!navigator.serviceWorker.controller;
+    var reloading = false;
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (!hadController || reloading) return;
+      reloading = true;
+      location.reload();
+    });
     window.addEventListener('load', function () {
       navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(function (reg) {
-        if (reg && reg.update) reg.update();
+        if (!reg || !reg.update) return;
+        reg.update();
+        // Home-screen apps often resume instead of relaunching, so check then too.
+        document.addEventListener('visibilitychange', function () {
+          if (!document.hidden) reg.update();
+        });
       }).catch(function () {});
     });
   }
