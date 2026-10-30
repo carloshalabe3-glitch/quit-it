@@ -42,7 +42,7 @@
   --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
 
   --pad: 1.25rem;
-  color-scheme: light dark;
+  color-scheme: light;
 }
 
 * { box-sizing: border-box; }
@@ -745,6 +745,21 @@ ol, ul { margin: 0; padding: 0; list-style: none; }
 }
 .settings-row:last-of-type { border-bottom: none; }
 .settings-row:active { color: var(--ink-2); }
+.theme-pick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.4rem; margin: 0.35rem 0 0.2rem; }
+.theme-opt {
+  padding: 0.6rem 0.4rem;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-s, 8px);
+  background: none;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
+}
+.theme-opt:active { transform: scale(0.965); }
+.theme-opt.is-active { background: var(--ink); border-color: var(--ink); color: var(--paper); }
 .settings-meta { font-size: 0.8rem; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 
 /* ---------- Sheets ---------- */
@@ -1074,27 +1089,28 @@ ol, ul { margin: 0; padding: 0; list-style: none; }
    The ledger inverts: cream ink on warm charcoal paper. Mustard and
    terracotta keep their jobs, a step brighter so they still read. */
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --paper: #161513;
-    --paper-2: #211F1C;
-    --paper-3: #2C2A26;
-    --ink: #EFEAE0;
-    --ink-2: #B1AB9E;
-    --ink-3: #7F7A6F;
-    --line: #2F2C28;
-    --line-2: #45413A;
-    --mustard: #E8B923;
-    --mustard-deep: #F0C94A;
-    --mustard-wash: #3A3117;
-    --terra: #D9714A;
-    --terra-deep: #E6875F;
-    --terra-wash: #3B241B;
-  }
-  .sheet-backdrop.is-open { background: rgba(0, 0, 0, 0.6); }
-  .milestone-backdrop { background: rgba(0, 0, 0, 0.7); }
-  .toast { background: #2C2A26; color: var(--ink); box-shadow: inset 0 0 0 1px var(--line-2); }
+/* Dark appearance: set by the app (Settings > Appearance), which can follow the
+   phone or override it. data-theme on <html> is applied before first paint. */
+:root:where([data-theme="dark"]) { color-scheme: dark; }
+:root:where([data-theme="dark"]) {
+  --paper: #161513;
+  --paper-2: #211F1C;
+  --paper-3: #2C2A26;
+  --ink: #EFEAE0;
+  --ink-2: #B1AB9E;
+  --ink-3: #7F7A6F;
+  --line: #2F2C28;
+  --line-2: #45413A;
+  --mustard: #E8B923;
+  --mustard-deep: #F0C94A;
+  --mustard-wash: #3A3117;
+  --terra: #D9714A;
+  --terra-deep: #E6875F;
+  --terra-wash: #3B241B;
 }
+:where([data-theme="dark"]) .sheet-backdrop.is-open { background: rgba(0, 0, 0, 0.6); }
+:where([data-theme="dark"]) .milestone-backdrop { background: rgba(0, 0, 0, 0.7); }
+:where([data-theme="dark"]) .toast { background: #2C2A26; color: var(--ink); box-shadow: inset 0 0 0 1px var(--line-2); }
 
 /* ---------- iOS navigation: slide in, drag from the edge to go back ---------- */
 

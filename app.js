@@ -2422,6 +2422,51 @@
     toastTimer = setTimeout(function () { toast.classList.add('hidden'); }, 300);
   }
 
+  // ---------- appearance ----------
+  // The app's own light/dark choice, or 'auto' to follow the phone. The inline
+  // script in index.html applies it before first paint; this keeps it in step after.
+
+  var THEME_KEY = 'ledger.theme';
+  var THEME_COLORS = { light: '#F7F4EC', dark: '#161513' };
+  var darkQuery = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+
+  function themePref() {
+    var pref = null;
+    try { pref = localStorage.getItem(THEME_KEY); } catch (e) {}
+    return pref === 'light' || pref === 'dark' ? pref : 'auto';
+  }
+
+  function applyTheme() {
+    var pref = themePref();
+    var dark = pref === 'dark' || (pref === 'auto' && !!darkQuery && darkQuery.matches);
+    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', THEME_COLORS[dark ? 'dark' : 'light']);
+  }
+
+  function setThemePref(pref) {
+    try {
+      if (pref === 'auto') localStorage.removeItem(THEME_KEY);
+      else localStorage.setItem(THEME_KEY, pref);
+    } catch (e) {}
+    applyTheme();
+    paintThemeControl();
+  }
+
+  if (darkQuery) {
+    if (darkQuery.addEventListener) darkQuery.addEventListener('change', applyTheme);
+    else if (darkQuery.addListener) darkQuery.addListener(applyTheme);
+  }
+
+  function paintThemeControl() {
+    var pref = themePref();
+    $('themePick').querySelectorAll('.theme-opt').forEach(function (opt) {
+      var on = opt.dataset.themePref === pref;
+      opt.classList.toggle('is-active', on);
+      opt.setAttribute('aria-checked', on ? 'true' : 'false');
+    });
+  }
+
   // ---------- live tick ----------
 
   function tick() {
@@ -2459,6 +2504,10 @@
   }
 
   function wire() {
+    $('themePick').querySelectorAll('.theme-opt').forEach(function (opt) {
+      opt.addEventListener('click', function () { setThemePref(opt.dataset.themePref); });
+    });
+    paintThemeControl();
     // iOS Safari only shows :active press states when a touch listener exists.
     document.addEventListener('touchstart', function () {}, { passive: true });
     applyTextSize();

@@ -8,10 +8,18 @@
 
 <!-- PWA / home screen -->
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#F7F4EC" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#161513" media="(prefers-color-scheme: dark)">
+<script>
+  // Appearance is applied before anything paints: the app's own choice, or the phone's.
+  (function () {
+    var pref = null;
+    try { pref = localStorage.getItem('ledger.theme'); } catch (e) {}
+    var dark = pref === 'dark' || (pref !== 'light' && !!window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    document.write('<meta name="theme-color" content="' + (dark ? '#161513' : '#F7F4EC') + '">' +
+      '<meta name="apple-mobile-web-app-status-bar-style" content="' + (dark ? 'black' : 'default') + '">');
+  })();
+</script>
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Quit it">
 <meta name="mobile-web-app-capable" content="yes">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
@@ -288,6 +296,16 @@
         <span>Things to do instead</span>
         <span class="settings-meta" id="activitiesCount"></span>
       </button>
+    </section>
+
+    <section class="section">
+      <div class="section-head"><h2>Appearance</h2></div>
+      <div class="theme-pick" id="themePick" role="radiogroup" aria-label="Appearance">
+        <button class="theme-opt" data-theme-pref="auto" role="radio">Automatic</button>
+        <button class="theme-opt" data-theme-pref="light" role="radio">Light</button>
+        <button class="theme-opt" data-theme-pref="dark" role="radio">Dark</button>
+      </div>
+      <p class="section-foot">Automatic follows your iPhone. Light or Dark keeps this app that way.</p>
     </section>
 
     <section class="section">
