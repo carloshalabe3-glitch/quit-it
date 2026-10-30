@@ -1,4 +1,4 @@
-var CACHE_NAME = 'quit-it-v24';
+var CACHE_NAME = 'quit-it-v25';
 var ASSETS = [
   './',
   './index.html',
@@ -14,7 +14,9 @@ var ASSETS = [
 self.addEventListener('install', function (event) {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then(function (cache) { return cache.addAll(ASSETS); })
+      // cache: 'reload' skips the browser's HTTP cache (GitHub Pages lets files sit there
+      // for 10 minutes), so a new version never gets saved with old files inside it.
+      .then(function (cache) { return cache.addAll(ASSETS.map(function (url) { return new Request(url, { cache: 'reload' }); })); })
       .then(function () { return self.skipWaiting(); })
   );
 });
