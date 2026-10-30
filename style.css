@@ -67,6 +67,21 @@ body {
   padding-top: env(safe-area-inset-top);
 }
 
+/* In dark appearance iOS draws the clock and battery over the page; keep that
+   strip solid so scrolled content never shows through behind them. */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: env(safe-area-inset-top);
+  background: var(--paper);
+  z-index: 40;
+  pointer-events: none;
+}
+body:has(#triggerScreen:not(.hidden))::before { background: var(--dark); }
+
 button { font-family: var(--sans); -webkit-tap-highlight-color: transparent; cursor: pointer; color: inherit; }
 input, textarea, select { font-family: var(--sans); }
 h1, h2, h3, p { margin: 0; }
