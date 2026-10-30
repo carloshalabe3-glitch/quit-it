@@ -30,6 +30,9 @@
 <body>
 
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="sym-theme-auto" viewBox="0 0 24 24"><circle fill="none" stroke="currentColor" stroke-width="1.8" cx="12" cy="12" r="8"/><path fill="currentColor" d="M12 4a8 8 0 0 1 0 16z"/></symbol>
+  <symbol id="sym-sun" viewBox="0 0 24 24"><circle fill="none" stroke="currentColor" stroke-width="1.8" cx="12" cy="12" r="3.6"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 2.8v2.1M12 19.1v2.1M2.8 12h2.1M19.1 12h2.1M5.5 5.5L7 7M17 17l1.5 1.5M5.5 18.5L7 17M17 7l1.5-1.5"/></symbol>
+  <symbol id="sym-moon" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.6A7.8 7.8 0 0 1 9.4 4.5a7.8 7.8 0 1 0 10.1 10.1z"/></symbol>
   <symbol id="sym-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="sym-dot" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="currentColor"/></symbol>
   <symbol id="sym-ring" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
@@ -301,11 +304,11 @@
     <section class="section">
       <div class="section-head"><h2>Appearance</h2></div>
       <div class="theme-pick" id="themePick" role="radiogroup" aria-label="Appearance">
-        <button class="theme-opt" data-theme-pref="auto" role="radio">Automatic</button>
-        <button class="theme-opt" data-theme-pref="light" role="radio">Light</button>
-        <button class="theme-opt" data-theme-pref="dark" role="radio">Dark</button>
+        <button class="theme-opt" data-theme-pref="auto" role="radio" aria-label="Automatic"><svg aria-hidden="true"><use href="#sym-theme-auto"/></svg></button>
+        <button class="theme-opt" data-theme-pref="light" role="radio" aria-label="Light"><svg aria-hidden="true"><use href="#sym-sun"/></svg></button>
+        <button class="theme-opt" data-theme-pref="dark" role="radio" aria-label="Dark"><svg aria-hidden="true"><use href="#sym-moon"/></svg></button>
       </div>
-      <p class="section-foot">Automatic follows your iPhone. Light or Dark keeps this app that way.</p>
+      <p class="section-foot" id="themeHint"></p>
     </section>
 
     <section class="section">

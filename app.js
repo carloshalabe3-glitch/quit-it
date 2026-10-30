@@ -2458,6 +2458,12 @@
     else if (darkQuery.addListener) darkQuery.addListener(applyTheme);
   }
 
+  var THEME_HINTS = {
+    auto: 'Automatic · follows your iPhone.',
+    light: 'Light · this app stays light.',
+    dark: 'Dark · this app stays dark.'
+  };
+
   function paintThemeControl() {
     var pref = themePref();
     $('themePick').querySelectorAll('.theme-opt').forEach(function (opt) {
@@ -2465,6 +2471,7 @@
       opt.classList.toggle('is-active', on);
       opt.setAttribute('aria-checked', on ? 'true' : 'false');
     });
+    $('themeHint').textContent = THEME_HINTS[pref];
   }
 
   // ---------- live tick ----------
