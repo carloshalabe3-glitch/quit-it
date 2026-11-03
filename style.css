@@ -591,6 +591,8 @@ ol, ul { margin: 0; padding: 0; list-style: none; }
 /* patterns */
 .pattern-summary { font-size: 0.92rem; line-height: 1.55; color: var(--ink-2); margin-bottom: 1.1rem; text-wrap: pretty; }
 .pattern-summary b { color: var(--ink); font-weight: 600; }
+.pattern-head { display: block; margin: 0.2rem 0 0.6rem; }
+.urge-section { margin-bottom: 1.5rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--line); }
 
 .chart-block { margin-top: 1.1rem; }
 .chart-block:first-child { margin-top: 0; }

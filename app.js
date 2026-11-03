@@ -149,6 +149,7 @@
       createdAt: typeof h.createdAt === 'number' ? h.createdAt : Date.now(),
       lastRelapseAt: typeof h.lastRelapseAt === 'number' ? h.lastRelapseAt : null,
       relapses: Array.isArray(h.relapses) ? h.relapses.filter(function (t) { return typeof t === 'number'; }) : [],
+      urges: Array.isArray(h.urges) ? h.urges.filter(function (t) { return typeof t === 'number'; }) : [],
       archived: !!h.archived,
       milestonesHit: Array.isArray(h.milestonesHit) ? h.milestonesHit : [],
       customMilestones: Array.isArray(h.customMilestones) ? h.customMilestones.filter(function (m) { return m && typeof m.days === 'number' && m.days > 0; }).map(normalizeCustomMilestone) : []
@@ -1177,11 +1178,16 @@
     body.innerHTML = '';
     var segs = completedSegments(habit);
     var n = habit.relapses.length;
+    var hasUrges = habit.urges.length > 0;
+    if (hasUrges) {
+      body.appendChild(buildUrgeSection(habit));
+      body.appendChild(el('div', 'eyebrow pattern-head', 'Relapses'));
+    }
 
     if (n < 3) {
       note.textContent = '';
       var msg = n === 0
-        ? 'Patterns appear once there are a few entries to compare. Right now there is one streak, and it is this one.'
+        ? (hasUrges ? 'None logged, so nothing to compare here yet.' : 'Patterns appear once there are a few entries to compare. Right now there is one streak, and it is this one.')
         : 'Patterns appear after three or so entries. Too early to read anything into ' + (n === 1 ? 'one entry.' : 'two entries.');
       body.appendChild(el('p', 'empty-note', msg));
       // still show the streak bars if there is at least one completed segment
@@ -1244,6 +1250,51 @@
     body.appendChild(buildStreakChart(habit, segs));
     body.appendChild(buildBandChart(bandCounts, n));
     body.appendChild(buildWeekdayChart(dayCounts, n));
+  }
+
+  // An urge "passed" if no relapse was logged in the 24 hours after it.
+  var URGE_WINDOW = DAY;
+
+  function buildUrgeSection(habit) {
+    var wrap = el('div', 'urge-section');
+    wrap.appendChild(el('div', 'eyebrow pattern-head', 'Urges'));
+    var urges = habit.urges;
+    var n = urges.length;
+    var now = Date.now();
+    var settled = urges.filter(function (t) {
+      return now - t >= URGE_WINDOW || habit.relapses.some(function (r) { return r >= t && r - t < URGE_WINDOW; });
+    });
+    var passed = settled.filter(function (t) {
+      return !habit.relapses.some(function (r) { return r >= t && r - t < URGE_WINDOW; });
+    }).length;
+
+    var bandCounts = BANDS.map(function () { return 0; });
+    var dayCounts = [0, 0, 0, 0, 0, 0, 0];
+    urges.forEach(function (ts) {
+      var d = new Date(ts);
+      BANDS.forEach(function (b, i) { if (b.test(d.getHours())) bandCounts[i]++; });
+      dayCounts[d.getDay()]++;
+    });
+
+    var summary = el('p', 'pattern-summary');
+    summary.appendChild(el('b', '', plural(n, 'urge')));
+    summary.appendChild(document.createTextNode(' logged.'));
+    if (settled.length) {
+      summary.appendChild(document.createTextNode(' '));
+      summary.appendChild(el('b', '', passed + ' of ' + settled.length));
+      summary.appendChild(document.createTextNode(' passed without a relapse.'));
+    }
+    if (n >= 3) {
+      var top = 0;
+      bandCounts.forEach(function (c, i) { if (c > bandCounts[top]) top = i; });
+      if (bandCounts[top] / n >= 0.4) summary.appendChild(document.createTextNode(' Most hit in the ' + BANDS[top].label.toLowerCase() + '.'));
+    }
+    wrap.appendChild(summary);
+    if (n >= 2) {
+      wrap.appendChild(buildBandChart(bandCounts, n, 'urge'));
+      wrap.appendChild(buildWeekdayChart(dayCounts, n, 'urge'));
+    }
+    return wrap;
   }
 
   function chartBlock(title, meta) {
@@ -1335,7 +1386,11 @@
       ' V' + (y + h) + ' Z';
   }
 
-  function buildBandChart(counts, n) {
+  function countLabel(c, unit) {
+    return unit === 'urge' ? plural(c, 'urge') : c + (c === 1 ? ' entry' : ' entries');
+  }
+
+  function buildBandChart(counts, n, unit) {
     var block = chartBlock('Time of day');
     var bar = el('div', 'band-bar');
     var max = Math.max.apply(null, counts);
@@ -1350,18 +1405,18 @@
     counts.forEach(function (c, i) {
       var s = el('span');
       s.appendChild(el('b', '', BANDS[i].label));
-      s.appendChild(document.createTextNode(c + (c === 1 ? ' entry' : ' entries')));
+      s.appendChild(document.createTextNode(countLabel(c, unit)));
       legend.appendChild(s);
     });
     block.appendChild(legend);
     return block;
   }
 
-  function buildWeekdayChart(counts, n) {
+  function buildWeekdayChart(counts, n, unit) {
     var block = chartBlock('Day of week');
     var W = 320, H = 80, padB = 16, padT = 16;
     var svg = svgEl('svg', { viewBox: '0 0 ' + W + ' ' + H, class: 'chart', role: 'img' });
-    svg.setAttribute('aria-label', 'Relapses by day of week');
+    svg.setAttribute('aria-label', (unit === 'urge' ? 'Urges' : 'Relapses') + ' by day of week');
     var slot = W / 7;
     var barW = 22;
     var max = Math.max(1, Math.max.apply(null, counts));
@@ -1385,7 +1440,7 @@
       svg.appendChild(t);
       var hit = svgEl('rect', { x: slot * i, y: 0, width: slot, height: H, class: 'bar-hit' });
       var describe = function () {
-        tip.textContent = WEEKDAYS[i] + ': ' + plural(c, 'entry').replace('entrys', 'entries');
+        tip.textContent = WEEKDAYS[i] + ': ' + countLabel(c, unit);
         Array.prototype.forEach.call(svg.querySelectorAll('.bar'), function (b) { b.classList.remove('is-active'); });
         bar.classList.add('is-active');
       };
@@ -2065,6 +2120,30 @@
   var triggerOpenedAt = 0;
   var triggerTimerHandle = null;
 
+  // Every "I'm triggered" quietly logs an urge for that habit. Reopening within
+  // 15 minutes is the same urge, and closing within 3 seconds was a mis-tap.
+  var URGE_MERGE = 15 * MINUTE;
+  var URGE_MISTAP = 3000;
+  var loggedUrgeAt = null;
+
+  function logUrge(habit) {
+    loggedUrgeAt = null;
+    if (!habit) return;
+    var now = Date.now();
+    var last = habit.urges[habit.urges.length - 1];
+    if (last && now - last < URGE_MERGE) return;
+    habit.urges.push(now);
+    loggedUrgeAt = now;
+    saveData();
+  }
+
+  function dropMistappedUrge(habit, stayed) {
+    if (!habit || !loggedUrgeAt || stayed >= URGE_MISTAP) return;
+    var idx = habit.urges.indexOf(loggedUrgeAt);
+    if (idx !== -1) { habit.urges.splice(idx, 1); saveData(); }
+    loggedUrgeAt = null;
+  }
+
   function pickActivity() {
     var pool = activeActivities();
     if (pool.length === 0) return FALLBACK_ACTIVITY;
@@ -2083,6 +2162,7 @@
     lastTriggerText = text;
     $('triggerText').textContent = text;
     var habit = findHabit(state.currentHabitId);
+    logUrge(habit);
     var why = habit && habit.why ? habit.why : '';
     $('triggerWhy').classList.toggle('hidden', !why);
     $('triggerWhyText').textContent = why ? '“' + why + '”' : '';
@@ -2104,6 +2184,7 @@
     clearInterval(triggerTimerHandle);
     stopBreathing();
     var stayed = Date.now() - triggerOpenedAt;
+    dropMistappedUrge(findHabit(state.currentHabitId), stayed);
     goToScreen(state.currentHabitId && findHabit(state.currentHabitId) ? 'detail' : 'home');
     if (stayed >= 2 * MINUTE) showToast('You stayed with it for ' + formatDuration(stayed) + '.');
   }
