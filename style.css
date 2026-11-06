@@ -300,6 +300,9 @@ ol, ul { margin: 0; padding: 0; list-style: none; }
 }
 .pin-key:active { background: var(--mustard); transform: scale(0.96); }
 .pin-key.empty { visibility: hidden; }
+.pin-key-face { display: flex; align-items: center; justify-content: center; background: transparent; color: var(--ink); }
+.pin-key-face svg { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.pin-key-face:active { background: var(--paper-2); }
 .pin-key-back { font-family: var(--sans); font-size: 0.82rem; font-weight: 600; color: var(--ink-2); background: transparent; }
 .pin-key-back:active { background: var(--paper-2); }
 

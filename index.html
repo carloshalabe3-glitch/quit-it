@@ -68,7 +68,7 @@
       <button class="pin-key" data-digit="7">7</button>
       <button class="pin-key" data-digit="8">8</button>
       <button class="pin-key" data-digit="9">9</button>
-      <button class="pin-key empty" tabindex="-1" aria-hidden="true"></button>
+      <button class="pin-key pin-key-face empty" id="faceIdKey" aria-label="Unlock with Face ID"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M9 9.5v1.5M15 9.5v1.5M12 9.5v3.5h-1M9 15.6c1.7 1.3 4.3 1.3 6 0"/></svg></button>
       <button class="pin-key" data-digit="0">0</button>
       <button class="pin-key pin-key-back" data-action="back" aria-label="Delete last digit">Delete</button>
     </div>
@@ -313,6 +313,7 @@
 
     <section class="section">
       <div class="section-head"><h2>Privacy</h2></div>
+      <button class="settings-row hidden" id="faceIdBtn"><span>Unlock with Face ID</span><span class="settings-meta" id="faceIdMeta"></span></button>
       <button class="settings-row" id="changePinBtn"><span>Change PIN</span></button>
       <button class="settings-row" id="settingsLockBtn"><span>Lock now</span></button>
       <p class="section-foot">The app locks itself the moment it goes to the background.</p>
@@ -320,7 +321,7 @@
 
     <section class="section">
       <div class="section-head"><h2>Your data</h2></div>
-      <button class="settings-row" id="backupBtn"><span>Backup &amp; restore</span></button>
+      <button class="settings-row" id="backupBtn"><span>Backup &amp; restore</span><span class="settings-meta" id="backupMeta"></span></button>
       <p class="section-foot">Everything lives in this browser&rsquo;s storage on this device. Nothing is sent anywhere. A backup is the only copy that exists outside it.</p>
     </section>
 

@@ -128,6 +128,7 @@
       pinHash: null,
       pinFails: 0,
       pinLockedUntil: 0,
+      faceIdCredential: null,
       onboarded: false,
       habits: [],
       customActivities: [],
@@ -163,6 +164,7 @@
       pinHash: typeof parsed.pinHash === 'string' ? parsed.pinHash : null,
       pinFails: typeof parsed.pinFails === 'number' ? parsed.pinFails : 0,
       pinLockedUntil: typeof parsed.pinLockedUntil === 'number' ? parsed.pinLockedUntil : 0,
+      faceIdCredential: typeof parsed.faceIdCredential === 'string' ? parsed.faceIdCredential : null,
       // Anyone with existing habits has already been through the first run.
       onboarded: parsed.onboarded === true || habits.length > 0,
       habits: habits,
@@ -531,6 +533,8 @@
       showScreenEl('lockScreen');
       refreshLockout();
       drawLockMark();
+      paintFaceIdKey();
+      tryFaceId();
     }
   }
 
@@ -734,7 +738,9 @@
     if (target === 'detail' && !findHabit(state.currentHabitId)) target = 'home';
     goToScreen(target);
     setTimeout(checkMilestones, 700);
+    if (!backupNudgeChecked) { backupNudgeChecked = true; setTimeout(maybeNudgeBackup, 1400); }
   }
+  var backupNudgeChecked = false;
 
   function relock() {
     if (!state.unlocked) return;
@@ -756,8 +762,122 @@
 
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) relock();
-    else if (state.screen === 'lock') drawLockMark();
+    else if (state.screen === 'lock') { drawLockMark(); tryFaceId(); }
   });
+
+  // ---------- Face ID ----------
+  // An optional passkey on this phone, used only as a key to the lock screen: iOS
+  // has to pass its own Face ID check before the passkey answers. The PIN stays
+  // as the way in whenever Face ID doesn't.
+
+  var faceIdBusy = false;
+
+  function randomBytes(n) {
+    var b = new Uint8Array(n);
+    crypto.getRandomValues(b);
+    return b;
+  }
+
+  function bytesToB64(buf) {
+    var s = '';
+    new Uint8Array(buf).forEach(function (c) { s += String.fromCharCode(c); });
+    return btoa(s);
+  }
+
+  function b64ToBytes(str) {
+    var s = atob(str);
+    var b = new Uint8Array(s.length);
+    for (var i = 0; i < s.length; i++) b[i] = s.charCodeAt(i);
+    return b;
+  }
+
+  function faceIdSupported(cb) {
+    if (!window.PublicKeyCredential || !PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable) { cb(false); return; }
+    PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().then(cb, function () { cb(false); });
+  }
+
+  function paintFaceIdKey() {
+    $('faceIdKey').classList.toggle('empty', !data.faceIdCredential);
+  }
+
+  function renderFaceIdRow() {
+    faceIdSupported(function (ok) {
+      $('faceIdBtn').classList.toggle('hidden', !ok && !data.faceIdCredential);
+      $('faceIdMeta').textContent = data.faceIdCredential ? 'On' : 'Off';
+    });
+  }
+
+  function enableFaceId() {
+    navigator.credentials.create({
+      publicKey: {
+        challenge: randomBytes(32),
+        rp: { name: 'Quit it' },
+        user: { id: randomBytes(16), name: 'Quit it', displayName: 'Quit it lock screen' },
+        pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+        authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'discouraged' },
+        timeout: 60000,
+        attestation: 'none'
+      }
+    }).then(function (cred) {
+      data.faceIdCredential = bytesToB64(cred.rawId);
+      saveData();
+      renderFaceIdRow();
+      paintFaceIdKey();
+      showToast('Face ID is on.');
+    }, function (err) {
+      showToast(err && err.name === 'NotAllowedError' ? 'Face ID wasn’t turned on.' : 'Face ID isn’t available here.');
+    });
+  }
+
+  function toggleFaceId() {
+    if (!data.faceIdCredential) { enableFaceId(); return; }
+    data.faceIdCredential = null;
+    saveData();
+    renderFaceIdRow();
+    paintFaceIdKey();
+    showToast('Face ID is off.');
+  }
+
+  // The answer has to be for this challenge, from this app, with Face ID actually checked.
+  function faceIdAnswerOk(assertion, challenge) {
+    try {
+      var client = JSON.parse(new TextDecoder().decode(assertion.response.clientDataJSON));
+      var expected = bytesToB64(challenge).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      var flags = new Uint8Array(assertion.response.authenticatorData)[32];
+      return client.type === 'webauthn.get' && client.challenge === expected && client.origin === location.origin && (flags & 0x04) !== 0;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function tryFaceId() {
+    if (!data.faceIdCredential || faceIdBusy || state.unlocked || state.screen !== 'lock' || document.hidden) return;
+    faceIdBusy = true;
+    var challenge = randomBytes(32);
+    navigator.credentials.get({
+      publicKey: {
+        challenge: challenge,
+        allowCredentials: [{ type: 'public-key', id: b64ToBytes(data.faceIdCredential) }],
+        userVerification: 'required',
+        timeout: 60000
+      }
+    }).then(function (assertion) {
+      faceIdBusy = false;
+      if (state.unlocked || state.screen !== 'lock' || !faceIdAnswerOk(assertion, challenge)) return;
+      state.lockBuffer = '';
+      renderPinDots('pinDots', 0);
+      $('lockError').textContent = '';
+      if (data.pinFails || data.pinLockedUntil) {
+        data.pinFails = 0;
+        data.pinLockedUntil = 0;
+        saveData();
+      }
+      clearInterval(lockoutTimer);
+      unlockApp();
+    }, function () {
+      faceIdBusy = false;
+    });
+  }
 
   // ---------- navigation ----------
 
@@ -1776,6 +1896,8 @@
   // ---------- settings (overview) ----------
 
   function renderOverview() {
+    $('backupMeta').textContent = backupAgeLabel();
+    renderFaceIdRow();
     var host = $('overviewList');
     host.innerHTML = '';
     var list = activeHabits();
@@ -2411,6 +2533,48 @@
     list.scrollTop = list.scrollHeight;
   }
 
+  // ---------- backup reminder ----------
+  // Remembers when a backup was last copied out. After a month without one, the
+  // app offers it once, then again a week later if it still hasn't happened.
+
+  var BACKUP_KEY = 'ledger.backup';
+  var BACKUP_EVERY = 30 * 86400000;
+  var BACKUP_RENUDGE = 7 * 86400000;
+
+  function backupInfo() {
+    try { return JSON.parse(localStorage.getItem(BACKUP_KEY)) || {}; } catch (e) { return {}; }
+  }
+
+  function saveBackupInfo(info) {
+    try { localStorage.setItem(BACKUP_KEY, JSON.stringify(info)); } catch (e) {}
+  }
+
+  function markBackedUp() {
+    var info = backupInfo();
+    info.last = Date.now();
+    saveBackupInfo(info);
+  }
+
+  function backupAgeLabel() {
+    var last = backupInfo().last;
+    if (!last) return 'Not backed up yet';
+    var days = Math.floor((Date.now() - last) / 86400000);
+    return 'Last backup: ' + (days <= 0 ? 'today' : days === 1 ? 'yesterday' : days + ' days ago');
+  }
+
+  function maybeNudgeBackup() {
+    var habits = activeHabits();
+    if (!habits.length) return;
+    var info = backupInfo();
+    var now = Date.now();
+    var since = info.last || Math.min.apply(null, habits.map(function (h) { return h.createdAt; }));
+    if (now - since < BACKUP_EVERY) return;
+    if (info.nudged && now - info.nudged < BACKUP_RENUDGE) return;
+    info.nudged = now;
+    saveBackupInfo(info);
+    showToast(info.last ? 'A month since your last backup.' : 'Your history only lives on this phone.', { action: 'Back up', onAction: openBackupSheet, duration: 6000 });
+  }
+
   // ---------- backup & restore ----------
 
   function openBackupSheet() {
@@ -2422,7 +2586,11 @@
 
   function copyBackupText() {
     var textarea = $('backupExportArea');
-    function showCopied() { showToast('Copied. Paste it somewhere private.'); }
+    function showCopied() {
+      markBackedUp();
+      $('backupMeta').textContent = backupAgeLabel();
+      showToast('Copied. Paste it somewhere private.');
+    }
     function showFailed() { showToast("Couldn't copy automatically. Tap the box and copy by hand."); }
     function legacy() {
       textarea.select();
@@ -2607,6 +2775,8 @@
     wirePad('changePin');
 
     $('changePinBtn').addEventListener('click', openChangePinSheet);
+    $('faceIdBtn').addEventListener('click', toggleFaceId);
+    $('faceIdKey').addEventListener('click', tryFaceId);
     $('changePinCancel').addEventListener('click', function () { closeSheet('changePinSheet'); });
     $('settingsLockBtn').addEventListener('click', relock);
 
@@ -2716,6 +2886,8 @@
     $('backupBtn').addEventListener('click', openBackupSheet);
     $('backupCloseBtn').addEventListener('click', function () { closeSheet('backupSheet'); });
     $('backupCopyBtn').addEventListener('click', copyBackupText);
+    // Copying the text by hand counts as a backup too.
+    $('backupExportArea').addEventListener('copy', function () { markBackedUp(); $('backupMeta').textContent = backupAgeLabel(); });
     $('backupRestoreBtn').addEventListener('click', restoreBackup);
 
     // habit sheet
