@@ -141,7 +141,7 @@
   <div class="app-shell home-shell">
     <header class="masthead">
       <div class="masthead-row">
-        <h1 class="wordmark">Quit it</h1>
+        <h1 class="wordmark"><svg class="wordmark-mark" viewBox="0 0 48 48" aria-hidden="true"><path d="M12 10v28"/><path d="M20 10v28"/><path d="M28 10v28"/><path d="M36 10v28"/><path d="M7 33L41 15"/></svg>Quit it</h1>
         <nav class="masthead-nav">
           <button class="nav-btn" id="viewToggleBtn">Grid</button>
           <button class="nav-btn" id="overviewBtn">Settings</button>
@@ -177,11 +177,16 @@
 
     <section class="hero">
       <div class="hero-name" id="detailName"></div>
-      <div class="eyebrow">Current streak</div>
-      <div class="hero-figure">
-        <span class="hero-num" id="detailStreakNum">0</span>
-        <span class="hero-unit" id="detailStreakUnit">days</span>
+      <div class="clock" id="heroClock" role="timer">
+        <span class="clock-num clock-days" id="detailStreakNum">0</span>
+        <span class="clock-num" id="heroHours">00</span>
+        <span class="clock-num" id="heroMinutes">00</span>
+        <span class="clock-unit clock-days" id="detailStreakUnit">days</span>
+        <span class="clock-unit" id="heroHoursUnit">hours</span>
+        <span class="clock-unit" id="heroMinutesUnit">minutes</span>
+        <i class="clock-pen" id="heroPen"></i>
       </div>
+      <svg class="tally" id="heroTally" aria-hidden="true"></svg>
       <div class="hero-since">
         <span id="detailSince"></span>
         <button class="text-link" id="setLastTimeBtn">Correct this</button>
@@ -202,20 +207,20 @@
 
     <section class="ledger-stats">
       <div class="stat">
-        <div class="stat-num" id="detailBest">0</div>
         <div class="stat-label">Best streak</div>
+        <div class="stat-num" id="detailBest">0</div>
       </div>
       <div class="stat">
-        <div class="stat-num" id="detailAvg">&ndash;</div>
         <div class="stat-label">Average streak</div>
+        <div class="stat-num" id="detailAvg">&ndash;</div>
       </div>
       <div class="stat">
-        <div class="stat-num" id="detailRelapseCount">0</div>
         <div class="stat-label">Relapses logged</div>
+        <div class="stat-num" id="detailRelapseCount">0</div>
       </div>
       <div class="stat">
-        <div class="stat-num" id="detailTrackingDays">0</div>
         <div class="stat-label">Days on the ledger</div>
+        <div class="stat-num" id="detailTrackingDays">0</div>
       </div>
     </section>
 
@@ -248,9 +253,6 @@
     </section>
 
     <section class="section detail-pane hidden" data-pane="milestones">
-      <div class="section-head">
-        <span class="section-note">Reached once per streak</span>
-      </div>
       <div id="milestoneListEl" class="milestone-list"></div>
       <div class="inline-form" id="milestoneForm">
         <input type="number" inputmode="numeric" id="newMilestoneDaysInput" placeholder="Days" min="1" max="36500" aria-label="Days">
@@ -333,6 +335,7 @@
 
 <!-- ============ TRIGGERED SCREEN ============ -->
 <div id="triggerScreen" class="screen screen-dark hidden">
+  <canvas class="ink-canvas" id="inkCanvas" aria-hidden="true"></canvas>
   <div class="app-shell trigger-shell">
     <div class="trigger-top">
       <span class="eyebrow eyebrow-light">This will pass</span>
@@ -341,23 +344,31 @@
 
     <div class="trigger-body" id="triggerBody">
       <div class="trigger-mode" id="triggerIdeaMode">
-        <div class="trigger-lead">Right now, do this instead:</div>
         <div class="trigger-card" id="triggerCard">
           <div class="trigger-card-text" id="triggerText">&nbsp;</div>
         </div>
         <div class="trigger-why hidden" id="triggerWhy">
-          <div class="trigger-why-label">You wrote this down for exactly this moment:</div>
           <div class="trigger-why-text" id="triggerWhyText"></div>
         </div>
       </div>
 
       <div class="trigger-mode hidden" id="triggerBreathMode">
         <div class="breath-stage">
-          <button type="button" class="breath-ring" id="breathRing" aria-label="Hold to breathe"><span class="breath-core"></span></button>
-          <div class="breath-phase" id="breathPhase">Get ready</div>
-          <div class="breath-count" id="breathCount"></div>
+          <button type="button" class="breath-ring" id="breathRing" aria-label="Hold to breathe">
+            <svg class="breath-dial" viewBox="0 0 200 200" aria-hidden="true">
+              <circle class="breath-track" cx="100" cy="100" r="98"/>
+              <circle class="breath-arc" id="breathArc" cx="100" cy="100" r="98" pathLength="1" transform="rotate(-90 100 100)"/>
+            </svg>
+          </button>
+          <div class="breath-phase" id="breathPhase">Hold the circle</div>
+          <svg class="breath-rounds" id="breathRounds" viewBox="0 0 48 48" aria-hidden="true">
+            <path class="is-ghost" d="M12 10v28"/><path class="is-ghost" d="M20 10v28"/><path class="is-ghost" d="M28 10v28"/><path class="is-ghost" d="M36 10v28"/>
+            <path class="breath-round" d="M12 10v28" pathLength="1"/><path class="breath-round" d="M20 10v28" pathLength="1"/><path class="breath-round" d="M28 10v28" pathLength="1"/><path class="breath-round" d="M36 10v28" pathLength="1"/>
+            <path class="breath-slash" d="M7 33L41 15" pathLength="1"/>
+          </svg>
+          <div class="sr-only" id="breathCount" aria-live="polite"></div>
         </div>
-        <div class="breath-hint" id="breathTip">Keep your thumb on the circle. In as it grows, out as it shrinks.</div>
+        <div class="breath-hint" id="breathTip">Keep your thumb on the circle. In as the ink spreads, out as it draws back.</div>
       </div>
     </div>
 
@@ -372,8 +383,7 @@
       <button class="btn btn-outline-light btn-block" id="breathStopBtn">Stop</button>
     </div>
     <div class="trigger-foot">
-      <span id="triggerTimer">Here for 0:00</span>
-      <span class="trigger-foot-note">Urges crest and fade. Stay with it.</span>
+      <span id="triggerTimer">0:00</span>
     </div>
   </div>
 </div>
@@ -474,10 +484,11 @@
 <!-- ============ MILESTONE ============ -->
 <div id="milestoneBackdrop" class="milestone-backdrop hidden">
   <div class="milestone-card" role="dialog" aria-modal="true">
-    <div class="milestone-rule"></div>
+    <svg class="lock-mark is-drawing" viewBox="0 0 48 48" aria-hidden="true"><path d="M12 10v28"/><path d="M20 10v28"/><path d="M28 10v28"/><path d="M36 10v28"/><path d="M7 33L41 15"/></svg>
     <div class="eyebrow" id="milestoneHabitName"></div>
     <div class="milestone-title" id="milestoneTitle">1 week clean</div>
     <div class="milestone-sub" id="milestoneSub">Entered in your ledger.</div>
+    <div class="milestone-rule"></div>
     <button class="btn btn-ink btn-block" id="milestoneOkBtn">Noted</button>
   </div>
 </div>
