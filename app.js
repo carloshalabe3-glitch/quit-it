@@ -5,7 +5,7 @@
   var CARD_SERIF = 'ui-serif, "New York", "Iowan Old Style", Georgia, serif';
   var CARD_SANS = '-apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Roboto, sans-serif';
   var PIN_SALT = 'ledger-app-salt-v1';
-  var APP_VERSION = '2.0';
+  var APP_VERSION = '3.0';
 
   var PIN_MAX_FAILS = 5;
   var PIN_COOLDOWN_MS = 30000;
@@ -194,6 +194,9 @@
 
   function $(id) { return document.getElementById(id); }
 
+  var motionQuery = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+  function reduceMotion() { return !!motionQuery && motionQuery.matches; }
+
   function uid() {
     return 'h_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
   }
@@ -313,7 +316,9 @@
 
   function formatDateTime(ms) {
     var d = new Date(ms);
-    return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) + ', ' +
+    var opts = { weekday: 'short', month: 'short', day: 'numeric' };
+    if (d.getFullYear() !== new Date().getFullYear()) opts = { month: 'short', day: 'numeric', year: 'numeric' };
+    return d.toLocaleDateString(undefined, opts) + ', ' +
       d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
   }
 
@@ -749,6 +754,9 @@
     closeAllSheets();
     document.querySelectorAll('.ctx-backdrop').forEach(function (n) { n.remove(); });
     stopBreathing();
+    cancelInkWipe();
+    inkStop();
+    triggerOpening = false;
     clearInterval(triggerTimerHandle);
     hideToast();
     state.lockBuffer = '';
@@ -756,6 +764,7 @@
     renderPinDots('pinDots', 0);
     $('lockError').textContent = '';
     state.screen = 'lock';
+    applyTheme();
     showScreenEl('lockScreen');
     refreshLockout();
   }
@@ -898,13 +907,19 @@
       if (SUB_SCREENS[name] && !inSub) history.pushState({ sub: true }, '');
       else if (name === 'home' && inSub) { ignoreNextPop = true; history.back(); }
     }
+    if (from === 'trigger' && name !== 'trigger') {
+      clearInterval(triggerTimerHandle);
+      stopBreathing();
+      inkStop();
+      applyTheme();
+    }
     if (!direction) {
       if (name === 'detail' && from === 'home') direction = 'push';
       else if (name === 'home' && (from === 'detail' || from === 'overview')) direction = 'pop';
       else if (name === 'overview' && from === 'home') direction = 'push';
     }
     if (name === 'home') { renderHome(); showScreenEl('homeScreen', direction); }
-    else if (name === 'detail') { renderDetail(state.currentHabitId); showScreenEl('detailScreen', direction); }
+    else if (name === 'detail') { renderDetail(state.currentHabitId, { enter: true }); showScreenEl('detailScreen', direction); }
     else if (name === 'overview') { renderOverview(); showScreenEl('overviewScreen', direction); }
     else if (name === 'trigger') { showScreenEl('triggerScreen'); }
     else if (name === 'onboard') { $('onboardDate').textContent = formatDateline(new Date()); showScreenEl('onboardScreen'); }
@@ -1189,7 +1204,7 @@
   function paintHomeCard(habit, ref) {
     var parts = formatStreak(currentStreakMs(habit), true);
     ref.numEl.textContent = parts.value;
-    ref.unitEl.textContent = parts.unit + ' clean';
+    ref.unitEl.textContent = parts.unit;
     ref.bestEl.innerHTML = '';
     ref.bestEl.appendChild(document.createTextNode('best '));
     ref.bestEl.appendChild(el('b', '', formatDuration(bestStreakMs(habit))));
@@ -1222,22 +1237,24 @@
     if (habit.emoji) nameHost.appendChild(makeIconEl(habit.emoji, 'habit-emoji'));
     nameHost.appendChild(document.createTextNode(habit.name));
 
-    var numEl = $('detailStreakNum');
-    numEl.classList.remove('is-reset');
-    if (opts.reset) { void numEl.offsetWidth; numEl.classList.add('is-reset'); }
+    var nums = document.querySelectorAll('#heroClock .clock-num');
+    nums.forEach(function (n) { n.classList.remove('is-reset'); });
+    if (opts.reset) {
+      void nums[0].offsetWidth;
+      nums.forEach(function (n) { n.classList.add('is-reset'); });
+    }
+    // Arriving on the page, or restarting the count, draws the tally afresh.
+    if (opts.enter || opts.reset) $('heroTally')._key = null;
 
     detailRefs = {
       habitId: habitId,
-      numEl: numEl,
-      unitEl: $('detailStreakUnit'),
       bestEl: $('detailBest'),
       fill: $('detailProgressFill'),
       nextLabel: $('detailNextLabel')
     };
     paintDetailFigures(habit);
 
-    var sinceText = (countsFromRelapse(habit) ? 'Since your last relapse, ' : 'Counting since ') + formatDateTime(streakStart(habit));
-    $('detailSince').textContent = sinceText;
+    $('detailSince').textContent = 'Since ' + formatDateTime(streakStart(habit));
     $('setLastTimeBtn').classList.toggle('hidden', countsFromRelapse(habit));
 
     $('detailProgressFill').style.width = '0%';
@@ -1253,7 +1270,8 @@
 
   function showDetailTab(name) {
     state.detailTab = name;
-    document.querySelectorAll('#detailTabs .ledger-tab').forEach(function (t) {
+    document.querySelectorAll('#detailTabs .ledger-tab').forEach(function (t, i) {
+      if (t.dataset.tab === name) $('detailTabs').style.setProperty('--tab-i', i);
       t.classList.toggle('is-active', t.dataset.tab === name);
       t.setAttribute('aria-selected', t.dataset.tab === name ? 'true' : 'false');
     });
@@ -1262,10 +1280,135 @@
     });
   }
 
-  function paintDetailFigures(habit) {
-    var parts = formatStreak(currentStreakMs(habit), false);
-    detailRefs.numEl.textContent = parts.value;
-    detailRefs.unitEl.textContent = parts.unit;
+  // A figure on the clean-time ledger. When it changes while you watch, the new
+  // number settles into place like a fresh entry.
+  function setFigure(node, text, animate) {
+    if (node.textContent === text) return;
+    node.textContent = text;
+    if (animate && node.animate && !reduceMotion()) {
+      node.animate([{ opacity: 0, transform: 'translateY(0.16em)' }, { opacity: 1, transform: 'none' }], { duration: 460, easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)' });
+    }
+  }
+
+  // The hero: days, hours and minutes clean, the rule under them inked across once a
+  // minute, and the tally of days below. `live` is the once-a-second repaint.
+  function paintClock(habit, live) {
+    var ms = currentStreakMs(habit);
+    var d = Math.floor(ms / DAY), h = Math.floor((ms % DAY) / HOUR), m = Math.floor((ms % HOUR) / MINUTE);
+    setFigure($('detailStreakNum'), String(d), live);
+    setFigure($('heroHours'), pad2(h), live);
+    setFigure($('heroMinutes'), pad2(m), live);
+    $('detailStreakUnit').textContent = d === 1 ? 'day' : 'days';
+    $('heroHoursUnit').textContent = h === 1 ? 'hour' : 'hours';
+    $('heroMinutesUnit').textContent = m === 1 ? 'minute' : 'minutes';
+    var clock = $('heroClock');
+    clock.classList.toggle('is-long', d >= 1000);
+    clock.setAttribute('aria-label', plural(d, 'day') + ', ' + plural(h, 'hour') + ', ' + plural(m, 'minute') + ' clean');
+
+    var pen = $('heroPen');
+    var p = (ms % MINUTE) / MINUTE;
+    if (!live || p < (pen._p || 0)) {
+      pen.classList.add('is-wrapping');
+      pen.style.setProperty('--p', p.toFixed(4));
+      void pen.offsetWidth;
+      pen.classList.remove('is-wrapping');
+    }
+    if (live) pen.style.setProperty('--p', Math.min(1, p + 1 / 60).toFixed(4));
+    pen._p = p;
+
+    var svg = $('heroTally');
+    var frac = (ms % DAY) / DAY;
+    var key = habit.id + ':' + d;
+    if (svg._key !== key) {
+      buildTally(svg, d, frac, svg._key === null || svg._key === undefined);
+      svg._key = key;
+    } else if (svg._live) {
+      svg._live.style.strokeDasharray = frac.toFixed(4) + ' 2';
+    }
+  }
+
+  // ---------- tally ----------
+  // The mark from the lock screen, carried through: one ink stroke per clean day,
+  // every fifth one struck across the four before it. The stroke for the day in
+  // progress is ghosted and fills with mustard as the day goes.
+
+  function tallyNoise(i, salt) {
+    var x = Math.sin(i * 12.9898 + salt * 78.233) * 43758.5453;
+    return (x - Math.floor(x)) * 2 - 1;
+  }
+
+  function fx(n) { return (Math.round(n * 100) / 100).toString(); }
+
+  // Stroke number i (from 0), on the lock mark's own proportions: strokes 8 apart
+  // and 28 tall, the slash reaching 5 past each side. A hand never repeats itself
+  // exactly, so each stroke leans and lands a hair differently.
+  function tallyStroke(i, perRow, pitch, u) {
+    var b = Math.floor(i / 5), k = i % 5;
+    var x0 = (b % perRow) * pitch + 5 * u;
+    var y0 = Math.floor(b / perRow) * 42 * u + 2.5 * u;
+    if (k < 4) {
+      var x = x0 + k * 8 * u;
+      return 'M' + fx(x + tallyNoise(i, 1) * 0.7 * u) + ' ' + fx(y0 + tallyNoise(i, 2) * 1.2 * u) +
+        'L' + fx(x + tallyNoise(i, 3) * 0.7 * u) + ' ' + fx(y0 + (28 + tallyNoise(i, 4) * 1.2) * u);
+    }
+    return 'M' + fx(x0 - 5 * u) + ' ' + fx(y0 + (23 + tallyNoise(i, 5) * 1.5) * u) +
+      'L' + fx(x0 + 29 * u) + ' ' + fx(y0 + (5 + tallyNoise(i, 6) * 1.5) * u);
+  }
+
+  // Picks how many bundles fit across so the tally stays a few rows tall, however long the streak.
+  function tallyLayout(strokes, width, maxRows, maxHeight) {
+    var bundles = Math.ceil(strokes / 5);
+    var choices = [8, 10, 12, 16, 20, 25, 32, 40, 50];
+    var lay = null;
+    for (var c = 0; c < choices.length; c++) {
+      var perRow = choices[c];
+      var pitch = width / perRow, u = pitch / 44;
+      var rows = Math.ceil(bundles / perRow);
+      lay = { perRow: perRow, pitch: pitch, u: u, rows: rows, height: (rows * 28 + (rows - 1) * 14 + 5) * u, stroke: Math.max(0.9, 3.6 * u) };
+      if (rows <= maxRows && (!maxHeight || lay.height <= maxHeight)) break;
+    }
+    return lay;
+  }
+
+  function buildTally(svg, days, frac, animate) {
+    var W = 320;
+    var lay = tallyLayout(days + 1, W, 5);
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + fx(lay.height));
+    svg.style.aspectRatio = W + ' / ' + fx(lay.height);
+    svg.innerHTML = '';
+    function add(d, cls, order) {
+      var path = svgEl('path', { d: d, class: cls, 'stroke-width': fx(lay.stroke), pathLength: 1 });
+      if (order !== undefined) path.style.setProperty('--i', order);
+      svg.appendChild(path);
+      return path;
+    }
+    var count;
+    if (days <= 60) {
+      // few enough to draw one by one, the way they were made
+      for (var i = 0; i < days; i++) add(tallyStroke(i, lay.perRow, lay.pitch, lay.u), 't', i);
+      count = days;
+    } else {
+      // a long streak arrives a bundle at a time
+      var full = Math.floor(days / 5);
+      for (var b = 0; b <= full; b++) {
+        var d = '';
+        for (var k = b * 5; k < Math.min(days, b * 5 + 5); k++) d += tallyStroke(k, lay.perRow, lay.pitch, lay.u);
+        if (d) add(d, 'tb', b);
+      }
+      count = full + 1;
+    }
+    var step = Math.min(days <= 60 ? 55 : 30, 900 / Math.max(1, count));
+    svg.style.setProperty('--step', step.toFixed(1) + 'ms');
+    svg.style.setProperty('--after', Math.round(280 + count * step) + 'ms');
+    var today = tallyStroke(days, lay.perRow, lay.pitch, lay.u);
+    add(today, 'is-ghost');
+    svg._live = add(today, 'is-live');
+    svg._live.style.strokeDasharray = frac.toFixed(4) + ' 2';
+    svg.classList.toggle('is-drawing', !!animate);
+  }
+
+  function paintDetailFigures(habit, live) {
+    paintClock(habit, !!live);
 
     paintFigure(detailRefs.bestEl, bestStreakMs(habit));
 
@@ -1283,6 +1426,8 @@
   }
 
   // ---------- patterns ----------
+  // One report for urges and relapses. On every chart urges are ink above the
+  // line and relapses are terracotta below it, one mark for each time it happened.
 
   var BANDS = [
     { key: 'morning', label: 'Morning', range: '5–12', test: function (h) { return h >= 5 && h < 12; } },
@@ -1291,128 +1436,72 @@
     { key: 'night', label: 'Night', range: '22–5', test: function (h) { return h >= 22 || h < 5; } }
   ];
   var WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-  function renderPatterns(habit) {
-    var body = $('patternsBody');
-    var note = $('patternsNote');
-    body.innerHTML = '';
-    var segs = completedSegments(habit);
-    var n = habit.relapses.length;
-    var hasUrges = habit.urges.length > 0;
-    if (hasUrges) {
-      body.appendChild(buildUrgeSection(habit));
-      body.appendChild(el('div', 'eyebrow pattern-head', 'Relapses'));
-    }
-
-    if (n < 3) {
-      note.textContent = '';
-      var msg = n === 0
-        ? (hasUrges ? 'None logged, so nothing to compare here yet.' : 'Patterns appear once there are a few entries to compare. Right now there is one streak, and it is this one.')
-        : 'Patterns appear after three or so entries. Too early to read anything into ' + (n === 1 ? 'one entry.' : 'two entries.');
-      body.appendChild(el('p', 'empty-note', msg));
-      // still show the streak bars if there is at least one completed segment
-      if (segs.length) body.appendChild(buildStreakChart(habit, segs));
-      return;
-    }
-
-    note.textContent = plural(n, 'entry').replace('entrys', 'entries');
-
-    // --- summary sentence ---
-    var bandCounts = BANDS.map(function (b) { return 0; });
-    var dayCounts = [0, 0, 0, 0, 0, 0, 0];
-    var weekend = 0;
-    habit.relapses.forEach(function (ts) {
-      var d = new Date(ts);
-      var h = d.getHours();
-      BANDS.forEach(function (b, i) { if (b.test(h)) bandCounts[i]++; });
-      dayCounts[d.getDay()]++;
-      if (d.getDay() === 0 || d.getDay() === 6) weekend++;
-    });
-    var topBand = 0;
-    bandCounts.forEach(function (c, i) { if (c > bandCounts[topBand]) topBand = i; });
-    var topDay = 0;
-    dayCounts.forEach(function (c, i) { if (c > dayCounts[topDay]) topDay = i; });
-
-    var summary = el('p', 'pattern-summary');
-    var bandShare = bandCounts[topBand] / n;
-    var frag = document.createDocumentFragment();
-    if (bandShare >= 0.4) {
-      frag.appendChild(el('b', '', bandCounts[topBand] + ' of ' + n));
-      frag.appendChild(document.createTextNode(' happened in the ' + BANDS[topBand].label.toLowerCase() + '. '));
-    } else {
-      frag.appendChild(document.createTextNode('No single time of day stands out. '));
-    }
-    var weekendShare = weekend / n;
-    if (weekendShare >= 0.6) {
-      frag.appendChild(el('b', '', weekend + ' of ' + n));
-      frag.appendChild(document.createTextNode(' fell on a weekend.'));
-    } else if (weekendShare <= 0.15 && n >= 5) {
-      frag.appendChild(document.createTextNode('Almost all of them were on weekdays' + (dayCounts[topDay] >= 2 ? ', ' + WEEKDAYS[topDay] + ' most often.' : '.')));
-    } else if (dayCounts[topDay] / n >= 0.4) {
-      frag.appendChild(el('b', '', WEEKDAYS[topDay]));
-      frag.appendChild(document.createTextNode(' comes up more than any other day.'));
-    } else {
-      frag.appendChild(document.createTextNode('They are spread across the week.'));
-    }
-
-    // trend: compare mean of last 3 completed streaks to the ones before
-    if (segs.length >= 4) {
-      var recent = segs.slice(-3);
-      var earlier = segs.slice(0, -3);
-      var mean = function (arr) { var t = 0; arr.forEach(function (s) { t += s.ms; }); return t / arr.length; };
-      var r = mean(recent), e = mean(earlier);
-      if (r > e * 1.25) frag.appendChild(document.createTextNode(' Your recent streaks are running longer than your early ones.'));
-      else if (r < e * 0.75) frag.appendChild(document.createTextNode(' Recent streaks have been shorter than your early ones. Worth noticing, not worth a verdict.'));
-    }
-    summary.appendChild(frag);
-    body.appendChild(summary);
-
-    body.appendChild(buildStreakChart(habit, segs));
-    body.appendChild(buildBandChart(bandCounts, n));
-    body.appendChild(buildWeekdayChart(dayCounts, n));
-  }
+  var WEEKDAYS_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
   // An urge "passed" if no relapse was logged in the 24 hours after it.
   var URGE_WINDOW = DAY;
 
-  function buildUrgeSection(habit) {
-    var wrap = el('div', 'urge-section');
-    wrap.appendChild(el('div', 'eyebrow pattern-head', 'Urges'));
-    var urges = habit.urges;
-    var n = urges.length;
+  // 'passed', 'lost' (a relapse followed within a day) or 'open' (too recent to call), oldest first.
+  function urgeOutcomes(habit) {
     var now = Date.now();
-    var settled = urges.filter(function (t) {
-      return now - t >= URGE_WINDOW || habit.relapses.some(function (r) { return r >= t && r - t < URGE_WINDOW; });
+    return habit.urges.map(function (t) {
+      var lost = habit.relapses.some(function (r) { return r >= t && r - t < URGE_WINDOW; });
+      return lost ? 'lost' : (now - t >= URGE_WINDOW ? 'passed' : 'open');
     });
-    var passed = settled.filter(function (t) {
-      return !habit.relapses.some(function (r) { return r >= t && r - t < URGE_WINDOW; });
-    }).length;
+  }
 
-    var bandCounts = BANDS.map(function () { return 0; });
-    var dayCounts = [0, 0, 0, 0, 0, 0, 0];
-    urges.forEach(function (ts) {
-      var d = new Date(ts);
-      BANDS.forEach(function (b, i) { if (b.test(d.getHours())) bandCounts[i]++; });
-      dayCounts[d.getDay()]++;
-    });
+  function renderPatterns(habit) {
+    var body = $('patternsBody');
+    $('patternsNote').textContent = '';
+    body.innerHTML = '';
+    var nU = habit.urges.length, nR = habit.relapses.length;
+    if (!nU && !nR) {
+      body.appendChild(el('p', 'empty-note', 'Nothing to compare yet.'));
+      return;
+    }
+    body.appendChild(buildReportFigures(habit));
+    if (nU + nR >= 2) {
+      body.appendChild(buildHourChart(habit));
+      body.appendChild(buildWeekdayChart(habit));
+    }
+    var segs = completedSegments(habit);
+    if (segs.length) body.appendChild(buildStreakChart(habit, segs));
+  }
 
-    var summary = el('p', 'pattern-summary');
-    summary.appendChild(el('b', '', plural(n, 'urge')));
-    summary.appendChild(document.createTextNode(' logged.'));
-    if (settled.length) {
-      summary.appendChild(document.createTextNode(' '));
-      summary.appendChild(el('b', '', passed + ' of ' + settled.length));
-      summary.appendChild(document.createTextNode(' passed without a relapse.'));
-    }
-    if (n >= 3) {
-      var top = 0;
-      bandCounts.forEach(function (c, i) { if (c > bandCounts[top]) top = i; });
-      if (bandCounts[top] / n >= 0.4) summary.appendChild(document.createTextNode(' Most hit in the ' + BANDS[top].label.toLowerCase() + '.'));
-    }
-    wrap.appendChild(summary);
-    if (n >= 2) {
-      wrap.appendChild(buildBandChart(bandCounts, n, 'urge'));
-      wrap.appendChild(buildWeekdayChart(dayCounts, n, 'urge'));
+  function reportFigure(num, small, label, swatch) {
+    var fig = el('div', 'report-fig');
+    var n = el('div', 'report-num', String(num));
+    if (small) n.appendChild(el('small', '', small));
+    fig.appendChild(n);
+    var l = el('div', 'report-label eyebrow');
+    if (swatch) l.appendChild(el('i', 'swatch' + (swatch === 'terra' ? ' swatch-terra' : '')));
+    l.appendChild(document.createTextNode(label));
+    fig.appendChild(l);
+    return fig;
+  }
+
+  // Urges, how many of them passed, and relapses; then every urge as one small
+  // stroke, in order, so the run of ink is visible at a glance.
+  function buildReportFigures(habit) {
+    var wrap = el('div', 'report-head');
+    var outcomes = urgeOutcomes(habit);
+    var passed = outcomes.filter(function (o) { return o === 'passed'; }).length;
+    var settled = outcomes.filter(function (o) { return o !== 'open'; }).length;
+    var row = el('div', 'report-figures');
+    row.appendChild(reportFigure(outcomes.length, '', 'Urges', 'ink'));
+    row.appendChild(reportFigure(settled ? passed : '–', settled ? 'of ' + settled : '', 'Passed'));
+    row.appendChild(reportFigure(habit.relapses.length, '', 'Relapses', 'terra'));
+    wrap.appendChild(row);
+    if (outcomes.length) {
+      var strip = el('div', 'outcome-row');
+      strip.setAttribute('role', 'img');
+      strip.setAttribute('aria-label', settled ? passed + ' of ' + settled + ' urges passed' : plural(outcomes.length, 'urge'));
+      outcomes.slice(-90).forEach(function (o, i) {
+        var mark = el('i', o === 'lost' ? 'is-lost' : (o === 'open' ? 'is-open' : ''));
+        mark.style.setProperty('--i', i);
+        strip.appendChild(mark);
+      });
+      wrap.appendChild(strip);
     }
     return wrap;
   }
@@ -1426,149 +1515,200 @@
     return block;
   }
 
-  // Column chart of streak lengths: completed segments + the current one.
+  // The one slot that clearly leads, or -1 when nothing stands out.
+  function clearPeak(counts, share) {
+    var total = 0, top = 0;
+    counts.forEach(function (c, i) { total += c; if (c > counts[top]) top = i; });
+    if (total < 3 || counts[top] < 2 || counts[top] / total < share) return -1;
+    return top;
+  }
+
+  // Urges say more about when it gets hard; relapses stand in until there are enough of them.
+  function patternSeries(habit) {
+    return habit.urges.length >= 3 ? habit.urges : habit.relapses;
+  }
+
+  function hourLabel(h, compact) {
+    var s = new Date(2000, 0, 1, h).toLocaleTimeString(undefined, { hour: 'numeric' });
+    return compact ? s.replace(/\s+/g, '').toLowerCase() : s;
+  }
+
+  function countPhrase(u, r) {
+    var parts = [];
+    if (u) parts.push(plural(u, 'urge'));
+    if (r) parts.push(plural(r, 'relapse'));
+    return parts.length ? parts.join(' · ') : 'nothing logged';
+  }
+
+  // Columns of unit marks. o: { up, down, blockWidth, labels, shade, aria, describe }
+  function buildMirrorChart(o) {
+    var n = o.up.length;
+    var W = 320, slot = W / n, bw = o.blockWidth;
+    var maxUp = Math.max.apply(null, o.up), maxDown = Math.max.apply(null, o.down);
+    var UNIT = 9, GAP = 1.5, AIR = 3;
+    var unitUp = maxUp ? Math.min(UNIT, 56 / maxUp) : UNIT;
+    var unitDown = maxDown ? Math.min(UNIT, 32 / maxDown) : UNIT;
+    var upH = Math.max(20, maxUp * unitUp), downH = maxDown * unitDown;
+    var base = 4 + upH + AIR;
+    var bottom = base + AIR + downH + (maxDown ? 3 : 0);
+    var H = bottom + 14;
+    var svg = svgEl('svg', { viewBox: '0 0 ' + W + ' ' + H, class: 'chart', role: 'img' });
+    svg.setAttribute('aria-label', o.aria);
+    (o.shade || []).forEach(function (r) {
+      svg.appendChild(svgEl('rect', { x: r[0] * slot, y: 0, width: (r[1] - r[0]) * slot, height: bottom, class: 'night' }));
+    });
+    svg.appendChild(svgEl('line', { x1: 0, x2: W, y1: base, y2: base, class: 'axis' }));
+
+    function stack(g, x, from, dir, count, unit, cls, order) {
+      if (!count) return;
+      if (unit < 5) {
+        var h = count * unit - GAP;
+        var solid = svgEl('rect', { x: x, y: dir < 0 ? from - h : from, width: bw, height: h, class: 'blk ' + cls });
+        solid.style.setProperty('--i', order);
+        g.appendChild(solid);
+        return;
+      }
+      for (var k = 0; k < count; k++) {
+        var y = dir < 0 ? from - (k + 1) * unit + GAP : from + k * unit;
+        var blk = svgEl('rect', { x: x, y: y, width: bw, height: unit - GAP, class: 'blk ' + cls });
+        blk.style.setProperty('--i', order + k * 2);
+        g.appendChild(blk);
+      }
+    }
+
+    var tip = el('div', 'chart-tip');
+    var cols = [];
+    o.up.forEach(function (u, i) {
+      var g = svgEl('g', { class: 'col' });
+      var x = slot * i + (slot - bw) / 2;
+      stack(g, x, base - AIR, -1, u, unitUp, 'u', i);
+      stack(g, x, base + AIR, 1, o.down[i], unitDown, 'r', i);
+      g.appendChild(svgEl('line', { x1: x - 1, x2: x + bw + 1, y1: base, y2: base, class: 'col-mark' }));
+      if (o.labels[i]) {
+        var t = svgEl('text', { x: o.labelAnchor === 'start' ? slot * i + 1 : slot * i + slot / 2, y: H - 2, 'text-anchor': o.labelAnchor === 'start' ? 'start' : 'middle' });
+        t.textContent = o.labels[i];
+        g.appendChild(t);
+      }
+      var hit = svgEl('rect', { x: slot * i, y: 0, width: slot, height: H, class: 'hit' });
+      var show = function () {
+        tip.textContent = o.describe(i);
+        cols.forEach(function (c) { c.classList.remove('is-active'); });
+        g.classList.add('is-active');
+      };
+      hit.addEventListener('mouseenter', show);
+      hit.addEventListener('click', show);
+      g.appendChild(hit);
+      cols.push(g);
+      svg.appendChild(g);
+    });
+    return { svg: svg, tip: tip };
+  }
+
+  function buildHourChart(habit) {
+    var up = [], down = [];
+    for (var h = 0; h < 24; h++) { up.push(0); down.push(0); }
+    habit.urges.forEach(function (t) { up[new Date(t).getHours()]++; });
+    habit.relapses.forEach(function (t) { down[new Date(t).getHours()]++; });
+    var bandCounts = BANDS.map(function () { return 0; });
+    patternSeries(habit).forEach(function (t) {
+      var hr = new Date(t).getHours();
+      BANDS.forEach(function (b, i) { if (b.test(hr)) bandCounts[i]++; });
+    });
+    var peak = clearPeak(bandCounts, 0.4);
+    var block = chartBlock('Time of day', peak === -1 ? '' : BANDS[peak].label);
+    var chart = buildMirrorChart({
+      up: up, down: down, blockWidth: 9.5,
+      labels: up.map(function (c, i) { return i % 6 === 0 ? hourLabel(i, true) : null; }),
+      labelAnchor: 'start',
+      shade: [[0, 5], [22, 24]],
+      aria: 'Urges and relapses by hour of the day',
+      describe: function (i) { return hourLabel(i) + ' · ' + countPhrase(up[i], down[i]); }
+    });
+    block.appendChild(chart.svg);
+    block.appendChild(chart.tip);
+    return block;
+  }
+
+  function buildWeekdayChart(habit) {
+    var up = [0, 0, 0, 0, 0, 0, 0], down = [0, 0, 0, 0, 0, 0, 0], lead = [0, 0, 0, 0, 0, 0, 0];
+    habit.urges.forEach(function (t) { up[new Date(t).getDay()]++; });
+    habit.relapses.forEach(function (t) { down[new Date(t).getDay()]++; });
+    patternSeries(habit).forEach(function (t) { lead[new Date(t).getDay()]++; });
+    var peak = clearPeak(lead, 0.34);
+    var block = chartBlock('Day of week', peak === -1 ? '' : WEEKDAYS_LONG[peak]);
+    var chart = buildMirrorChart({
+      up: up, down: down, blockWidth: 26,
+      labels: WEEKDAYS.map(function (d) { return d.charAt(0); }),
+      aria: 'Urges and relapses by day of the week',
+      describe: function (i) { return WEEKDAYS_LONG[i] + ' · ' + countPhrase(up[i], down[i]); }
+    });
+    block.appendChild(chart.svg);
+    block.appendChild(chart.tip);
+    return block;
+  }
+
+  // Every streak as one pen stroke, oldest first; the one still running is mustard.
   function buildStreakChart(habit, segs) {
-    var MAX_BARS = 14;
+    var MAX = 24;
     var items = segs.map(function (s) { return { ms: s.ms, start: s.start, end: s.end, current: false }; });
     items.push({ ms: currentStreakMs(habit), start: streakStart(habit), end: null, current: true });
-    if (items.length > MAX_BARS) items = items.slice(items.length - MAX_BARS);
+    if (items.length > MAX) items = items.slice(items.length - MAX);
     var best = bestStreakMs(habit);
 
-    var block = chartBlock('Streak lengths', items.length < segs.length + 1 ? 'last ' + items.length : plural(items.length, 'streak'));
+    var block = chartBlock('Streaks', 'best ' + formatDuration(best));
 
-    var W = 320, H = 104, padL = 0, padB = 16, padT = 18;
+    var W = 320, H = 98, padB = 16, padT = 16;
     var svg = svgEl('svg', { viewBox: '0 0 ' + W + ' ' + H, class: 'chart', role: 'img' });
     svg.setAttribute('aria-label', 'Streak lengths, oldest to newest');
-    var innerW = W - padL;
-    var slot = innerW / items.length;
-    var barW = Math.min(22, slot * 0.62);
+    var slot = W / Math.max(items.length, 10);
+    var sw = Math.max(2.5, Math.min(5, slot * 0.3));
     var maxMs = Math.max(best, DAY);
     var plotH = H - padB - padT;
+    var base = H - padB;
 
-    // baseline
-    svg.appendChild(svgEl('line', { x1: 0, x2: W, y1: H - padB + 0.5, y2: H - padB + 0.5, class: 'axis' }));
-    // best marker
     if (best > 0) {
       var by = padT + plotH - (best / maxMs) * plotH;
-      svg.appendChild(svgEl('line', { x1: 0, x2: W, y1: by + 0.5, y2: by + 0.5, class: 'marker' }));
+      svg.appendChild(svgEl('line', { x1: 0, x2: W, y1: by, y2: by, class: 'marker' }));
     }
+    svg.appendChild(svgEl('line', { x1: 0, x2: W, y1: base, y2: base, class: 'axis' }));
 
     var tip = el('div', 'chart-tip');
+    var strokes = [];
+    var bestLabelled = false;
     items.forEach(function (it, i) {
-      var h = Math.max(2, (it.ms / maxMs) * plotH);
-      var x = padL + slot * i + (slot - barW) / 2;
-      var y = padT + plotH - h;
-      var cls = 'bar' + (it.current ? ' is-current' : '') + (!it.current && it.ms === best && best > 0 ? ' is-best' : '');
-      var bar = svgEl('path', { d: roundedTopRect(x, y, barW, h, Math.min(4, barW / 2)), class: cls });
-      bar.style.setProperty('--i', i);
-      svg.appendChild(bar);
-      // label the best and the current bar only
-      if (it.current || (it.ms === best && best > 0)) {
-        var lbl = svgEl('text', { x: x + barW / 2, y: y - 5, 'text-anchor': 'middle', class: 'bar-lbl' + (it.current ? ' strong' : '') });
-        lbl.textContent = it.current ? 'now' : 'best';
+      var h = Math.max(3, (it.ms / maxMs) * plotH);
+      var cx = slot * i + slot / 2;
+      var top = base - h + sw / 2;
+      var stroke = svgEl('path', { d: 'M' + fx(cx) + ' ' + fx(base - sw / 2 - 1.5) + 'V' + fx(Math.min(top, base - sw / 2 - 2)), class: 'stroke' + (it.current ? ' is-current' : ''), 'stroke-width': fx(sw), pathLength: 1 });
+      stroke.style.setProperty('--i', i);
+      svg.appendChild(stroke);
+      strokes.push(stroke);
+      var isBest = !it.current && it.ms === best && best > 0 && !bestLabelled;
+      if (it.current || isBest) {
+        if (isBest) bestLabelled = true;
+        var anchor = cx < 14 ? 'start' : (cx > W - 14 ? 'end' : 'middle');
+        var lbl = svgEl('text', { x: anchor === 'middle' ? cx : (anchor === 'start' ? cx - sw / 2 : cx + sw / 2), y: base - h - 5, 'text-anchor': anchor, class: 'bar-lbl' + (it.current ? ' strong' : '') });
+        lbl.textContent = it.current ? 'NOW' : 'BEST';
         svg.appendChild(lbl);
       }
-      var hit = svgEl('rect', { x: padL + slot * i, y: 0, width: slot, height: H, class: 'bar-hit' });
+      var hit = svgEl('rect', { x: slot * i, y: 0, width: slot, height: H, class: 'hit' });
       var describe = function () {
-        var when = it.current ? 'Current streak, since ' + formatDateShort(it.start) : formatDateShort(it.start) + ' to ' + formatDateShort(it.end);
+        var when = it.current ? 'since ' + formatDateShort(it.start) : formatDateShort(it.start) + ' to ' + formatDateShort(it.end);
         tip.textContent = formatDuration(it.ms) + ' · ' + when;
-        Array.prototype.forEach.call(svg.querySelectorAll('.bar'), function (b) { b.classList.remove('is-active'); });
-        bar.classList.add('is-active');
+        strokes.forEach(function (b) { b.classList.remove('is-active'); });
+        if (!it.current) stroke.classList.add('is-active');
       };
       hit.addEventListener('mouseenter', describe);
       hit.addEventListener('click', describe);
       svg.appendChild(hit);
     });
 
-    // axis labels: first and last dates
-    var first = svgEl('text', { x: 0, y: H - 3 });
-    first.textContent = formatDateShort(items[0].start);
+    var first = svgEl('text', { x: 0, y: H - 2 });
+    first.textContent = formatDateShort(items[0].start).toUpperCase();
     svg.appendChild(first);
-    if (items.length > 1) {
-      var last = svgEl('text', { x: W, y: H - 3, 'text-anchor': 'end' });
-      last.textContent = 'now';
-      svg.appendChild(last);
-    }
 
     block.appendChild(svg);
-    tip.textContent = 'Dashed line marks your best: ' + formatDuration(best) + '.' + (useTip('pattern-bars') ? ' Tap a bar for details.' : '');
-    block.appendChild(tip);
-    return block;
-  }
-
-  function roundedTopRect(x, y, w, h, r) {
-    r = Math.min(r, h);
-    return 'M' + x + ' ' + (y + h) +
-      ' V' + (y + r) +
-      ' Q' + x + ' ' + y + ' ' + (x + r) + ' ' + y +
-      ' H' + (x + w - r) +
-      ' Q' + (x + w) + ' ' + y + ' ' + (x + w) + ' ' + (y + r) +
-      ' V' + (y + h) + ' Z';
-  }
-
-  function countLabel(c, unit) {
-    return unit === 'urge' ? plural(c, 'urge') : c + (c === 1 ? ' entry' : ' entries');
-  }
-
-  function buildBandChart(counts, n, unit) {
-    var block = chartBlock('Time of day');
-    var bar = el('div', 'band-bar');
-    var max = Math.max.apply(null, counts);
-    counts.forEach(function (c, i) {
-      var seg = el('div', 'band-seg' + (c === max && c > 0 ? ' is-high' : '') + (c === 0 ? ' is-empty' : ''));
-      seg.style.flexGrow = c === 0 ? 0.25 : c;
-      seg.title = BANDS[i].label + ': ' + c;
-      bar.appendChild(seg);
-    });
-    block.appendChild(bar);
-    var legend = el('div', 'band-legend');
-    counts.forEach(function (c, i) {
-      var s = el('span');
-      s.appendChild(el('b', '', BANDS[i].label));
-      s.appendChild(document.createTextNode(countLabel(c, unit)));
-      legend.appendChild(s);
-    });
-    block.appendChild(legend);
-    return block;
-  }
-
-  function buildWeekdayChart(counts, n, unit) {
-    var block = chartBlock('Day of week');
-    var W = 320, H = 80, padB = 16, padT = 16;
-    var svg = svgEl('svg', { viewBox: '0 0 ' + W + ' ' + H, class: 'chart', role: 'img' });
-    svg.setAttribute('aria-label', (unit === 'urge' ? 'Urges' : 'Relapses') + ' by day of week');
-    var slot = W / 7;
-    var barW = 22;
-    var max = Math.max(1, Math.max.apply(null, counts));
-    var plotH = H - padB - padT;
-    svg.appendChild(svgEl('line', { x1: 0, x2: W, y1: H - padB + 0.5, y2: H - padB + 0.5, class: 'axis' }));
-    var tip = el('div', 'chart-tip');
-    counts.forEach(function (c, i) {
-      var h = c === 0 ? 2 : Math.max(3, (c / max) * plotH);
-      var x = slot * i + (slot - barW) / 2;
-      var y = padT + plotH - h;
-      var bar = svgEl('path', { d: roundedTopRect(x, y, barW, h, 4), class: 'bar' + (c === max && c > 0 ? ' is-high' : '') + (c === 0 ? ' is-empty' : '') });
-      bar.style.setProperty('--i', i);
-      svg.appendChild(bar);
-      if (c === max && c > 0) {
-        var lbl = svgEl('text', { x: x + barW / 2, y: y - 5, 'text-anchor': 'middle', class: 'bar-lbl strong' });
-        lbl.textContent = c;
-        svg.appendChild(lbl);
-      }
-      var t = svgEl('text', { x: slot * i + slot / 2, y: H - 3, 'text-anchor': 'middle' });
-      t.textContent = WEEKDAYS[i].charAt(0);
-      svg.appendChild(t);
-      var hit = svgEl('rect', { x: slot * i, y: 0, width: slot, height: H, class: 'bar-hit' });
-      var describe = function () {
-        tip.textContent = WEEKDAYS[i] + ': ' + countLabel(c, unit);
-        Array.prototype.forEach.call(svg.querySelectorAll('.bar'), function (b) { b.classList.remove('is-active'); });
-        bar.classList.add('is-active');
-      };
-      hit.addEventListener('mouseenter', describe);
-      hit.addEventListener('click', describe);
-      svg.appendChild(hit);
-    });
-    block.appendChild(svg);
+    tip.textContent = useTip('pattern-bars') ? 'Tap a stroke for its dates.' : '';
     block.appendChild(tip);
     return block;
   }
@@ -1617,6 +1757,7 @@
       }
       grid.appendChild(cell);
     }
+    while (grid.children.length % 7) grid.appendChild(el('div', 'cal-cell cal-blank'));
 
     var currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     $('calPrevBtn').disabled = false;
@@ -1628,7 +1769,7 @@
   function renderHistory(habit) {
     var host = $('historyList');
     host.innerHTML = '';
-    $('historyNote').textContent = habit.relapses.length ? plural(habit.relapses.length, 'entry').replace('entrys', 'entries') : '';
+    $('historyNote').textContent = '';
     if (habit.relapses.length === 0) {
       host.appendChild(el('p', 'empty-note', 'No relapses on record. If one happens, log it here and the count simply restarts.'));
       return;
@@ -1681,7 +1822,7 @@
       }
       row.appendChild(mark);
       var titleWrap = el('div');
-      titleWrap.appendChild(el('span', 'ms-title', m.title));
+      titleWrap.appendChild(el('span', 'ms-title', m.title.replace(' clean', '')));
       row.appendChild(titleWrap);
 
       var metaWrap = el('div', 'ms-meta');
@@ -1741,90 +1882,102 @@
   }
 
   // ---------- streak card ----------
+  // A poster, 4:5. Paper, one mustard sun, the count set large in ink over it,
+  // and the days themselves tallied underneath.
 
   function drawStreakCard(habit) {
-    var size = 1080;
+    var W = 1080, H = 1350, M = 96;
+    var PAPER = '#F7F4EC', INK = '#1A1A1A', INK2 = '#5A574E', INK3 = '#857F72', MUSTARD = '#E8B923', GHOST = '#C6C0AC';
     var canvas = document.createElement('canvas');
-    canvas.width = size;
-    canvas.height = size;
+    canvas.width = W;
+    canvas.height = H;
     var ctx = canvas.getContext('2d');
+    var ms = currentStreakMs(habit);
+    var parts = formatStreak(ms, true);
+    var days = Math.floor(ms / DAY);
 
-    // paper
-    ctx.fillStyle = '#F7F4EC';
-    ctx.fillRect(0, 0, size, size);
+    ctx.fillStyle = PAPER;
+    ctx.fillRect(0, 0, W, H);
 
-    var margin = 96;
-    ctx.fillStyle = '#1A1A1A';
+    // the sun, running off the right edge
+    ctx.fillStyle = MUSTARD;
+    ctx.beginPath();
+    ctx.arc(W - 236, 548, 352, 0, Math.PI * 2);
+    ctx.fill();
 
-    // masthead rule
-    ctx.fillRect(margin, 150, size - margin * 2, 4);
-
+    // masthead: the mark, the name of the ledger, the date, and a thick-and-thin rule
+    ctx.strokeStyle = INK;
+    ctx.lineCap = 'square';
+    ctx.lineWidth = 4.6;
+    ctx.save();
+    ctx.translate(M - 6, 76);
+    ctx.scale(1.2, 1.2);
+    ctx.stroke(new Path2D('M12 10v28M20 10v28M28 10v28M36 10v28M7 33L41 15'));
+    ctx.restore();
+    ctx.fillStyle = INK;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
-    ctx.font = '700 44px ' + CARD_SERIF;
-    ctx.fillText('Quit it', margin, 130);
+    ctx.font = '700 46px ' + CARD_SERIF;
+    ctx.fillText('Quit it', M + 62, 121);
+    ctx.fillStyle = INK2;
+    ctx.font = '600 21px ' + CARD_SANS;
+    var dateText = new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase();
+    drawTracked(ctx, dateText, W - M - trackedWidth(ctx, dateText, 4.5), 119, 4.5);
+    ctx.fillStyle = INK;
+    ctx.fillRect(M, 152, W - M * 2, 5);
+    ctx.fillRect(M, 165, W - M * 2, 1.5);
 
-    ctx.textAlign = 'right';
-    ctx.font = '500 26px ' + CARD_SANS;
-    ctx.fillStyle = '#8F8B80';
-    ctx.fillText(new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' }), size - margin, 130);
+    // what it is
+    ctx.font = '600 62px ' + CARD_SERIF;
+    ctx.fillText(fitText(ctx, habit.name, W - M * 2), M, 268);
 
-    // eyebrow
-    ctx.textAlign = 'left';
-    ctx.fillStyle = '#8F8B80';
-    ctx.font = '600 26px ' + CARD_SANS;
-    var eyebrow = 'TIME CLEAN';
-    drawTracked(ctx, eyebrow, margin, 260, 4);
-
-    // habit name
-    ctx.fillStyle = '#1A1A1A';
-    ctx.font = '600 52px ' + CARD_SERIF;
-    ctx.fillText(fitText(ctx, habit.name, size - margin * 2), margin, 330);
-
-    // number
-    var parts = formatStreak(currentStreakMs(habit), true);
+    // the count
     var numText = String(parts.value);
-    var numSize = 400;
-    if (numText.length >= 4) numSize = 270;
-    else if (numText.length === 3) numSize = 330;
-    ctx.font = '700 ' + numSize + 'px ' + CARD_SERIF;
-    ctx.textBaseline = 'alphabetic';
-    var numY = 740;
-    ctx.fillText(numText, margin - 14, numY);
-    var numW = ctx.measureText(numText).width;
+    var numSize = numText.length >= 4 ? 372 : (numText.length === 3 ? 480 : 590);
+    ctx.font = '600 ' + numSize + 'px ' + CARD_SERIF;
+    if ('letterSpacing' in ctx) ctx.letterSpacing = Math.round(-numSize * 0.035) + 'px';
+    var numY = 800;
+    ctx.fillText(numText, M - numSize * 0.03, numY);
+    if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
 
-    ctx.font = '500 46px ' + CARD_SANS;
-    ctx.fillStyle = '#5E5B52';
-    ctx.fillText(parts.unit + ' clean', margin + numW + 6, numY);
+    ctx.font = 'italic 400 66px ' + CARD_SERIF;
+    ctx.fillStyle = INK;
+    ctx.fillText(parts.unit + ' clean', M, numY + 98);
 
-    // mustard rule under the number
-    ctx.fillStyle = '#E8B923';
-    ctx.fillRect(margin, numY + 64, size - margin * 2, 4);
+    // the days, tallied; today's stroke is still being drawn
+    var top = 968, room = 176;
+    var lay = tallyLayout(days + 1, W - M * 2, 4, room);
+    ctx.save();
+    ctx.translate(M, top + (room - lay.height) / 2);
+    ctx.lineWidth = lay.stroke;
+    ctx.strokeStyle = INK;
+    var done = '';
+    for (var i = 0; i < days; i++) done += tallyStroke(i, lay.perRow, lay.pitch, lay.u);
+    if (done) ctx.stroke(new Path2D(done));
+    ctx.strokeStyle = GHOST;
+    ctx.stroke(new Path2D(tallyStroke(days, lay.perRow, lay.pitch, lay.u)));
+    ctx.restore();
 
-    // footer figures
-    var footY = numY + 136;
-    ctx.fillStyle = '#8F8B80';
-    ctx.font = '600 24px ' + CARD_SANS;
-    drawTracked(ctx, 'BEST STREAK', margin, footY, 4);
-    drawTracked(ctx, 'RELAPSES LOGGED', size / 2 + 40, footY, 4);
-
-    var bp = figureParts(bestStreakMs(habit));
-    ctx.fillStyle = '#1A1A1A';
-    ctx.font = '700 64px ' + CARD_SERIF;
-    ctx.fillText(bp.value, margin, footY + 80);
-    var bw = ctx.measureText(bp.value).width;
-    ctx.fillText(String(habit.relapses.length), size / 2 + 40, footY + 80);
-    ctx.font = '500 28px ' + CARD_SANS;
-    ctx.fillStyle = '#5E5B52';
-    ctx.fillText(bp.unit, margin + bw + 14, footY + 80);
-
-    // footer
-    ctx.fillStyle = '#8F8B80';
-    ctx.font = '500 24px ' + CARD_SANS;
-    ctx.textAlign = 'right';
-    ctx.fillText('Kept privately, on one phone.', size - margin, size - 56);
+    // foot: since when, and the best there has been
+    ctx.fillStyle = INK;
+    ctx.fillRect(M, 1178, W - M * 2, 1.5);
+    var colB = W / 2 + 24;
+    ctx.fillStyle = INK3;
+    ctx.font = '600 21px ' + CARD_SANS;
+    drawTracked(ctx, 'SINCE', M, 1228, 4.5);
+    drawTracked(ctx, 'BEST', colB, 1228, 4.5);
+    ctx.fillStyle = INK;
+    ctx.font = '600 44px ' + CARD_SERIF;
+    ctx.fillText(new Date(streakStart(habit)).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }), M, 1284);
+    ctx.fillText(formatDuration(bestStreakMs(habit)), colB, 1284);
 
     return canvas;
+  }
+
+  function trackedWidth(ctx, text, tracking) {
+    var w = 0;
+    for (var i = 0; i < text.length; i++) w += ctx.measureText(text.charAt(i)).width + tracking;
+    return w - tracking;
   }
 
   function drawTracked(ctx, text, x, y, tracking) {
@@ -2241,6 +2394,7 @@
   var lastTriggerText = null;
   var triggerOpenedAt = 0;
   var triggerTimerHandle = null;
+  var triggerOpening = false;
 
   // Every "I'm triggered" quietly logs an urge for that habit. Reopening within
   // 15 minutes is the same urge, and closing within 3 seconds was a mis-tap.
@@ -2278,6 +2432,7 @@
   }
 
   function openTrigger() {
+    if (triggerOpening) return;
     hideToast();
     lastTriggerText = null;
     var text = pickActivity();
@@ -2290,25 +2445,39 @@
     $('triggerWhyText').textContent = why ? '“' + why + '”' : '';
     showTriggerMode('idea');
     triggerOpenedAt = Date.now();
-    clearInterval(triggerTimerHandle);
-    paintTriggerTimer();
-    triggerTimerHandle = setInterval(paintTriggerTimer, 1000);
-    goToScreen('trigger');
+    triggerOpening = true;
+    // The page goes dark from the button outward, like ink let into water.
+    inkWipe(true, $('triggerBtn'), function () {
+      triggerOpening = false;
+      if (!state.unlocked || state.screen !== 'detail') return;
+      clearInterval(triggerTimerHandle);
+      paintTriggerTimer();
+      triggerTimerHandle = setInterval(paintTriggerTimer, 1000);
+      setThemeColor(THEME_COLORS.dark);
+      goToScreen('trigger');
+      inkStart();
+    });
   }
 
   function paintTriggerTimer() {
     var s = Math.floor((Date.now() - triggerOpenedAt) / 1000);
     var m = Math.floor(s / 60);
-    $('triggerTimer').textContent = 'Here for ' + m + ':' + pad2(s % 60);
+    $('triggerTimer').textContent = m + ':' + pad2(s % 60);
   }
 
   function closeTrigger() {
+    if (state.screen !== 'trigger') return;
     clearInterval(triggerTimerHandle);
     stopBreathing();
     var stayed = Date.now() - triggerOpenedAt;
     dropMistappedUrge(findHabit(state.currentHabitId), stayed);
-    goToScreen(state.currentHabitId && findHabit(state.currentHabitId) ? 'detail' : 'home');
-    if (stayed >= 2 * MINUTE) showToast('You stayed with it for ' + formatDuration(stayed) + '.');
+    var dest = state.currentHabitId && findHabit(state.currentHabitId) ? 'detail' : 'home';
+    // ...and draws back into the button it came from.
+    inkWipe(false, null, function () {
+      goToScreen(dest, null, 'instant');
+      if (stayed >= 2 * MINUTE) showToast('You stayed with it for ' + formatDuration(stayed) + '.');
+      return dest === 'detail' ? $('triggerBtn') : null;
+    });
   }
 
   function rerollTrigger() {
@@ -2319,7 +2488,7 @@
     setTimeout(function () {
       $('triggerText').textContent = text;
       card.classList.remove('is-swapping');
-    }, 150);
+    }, 230);
   }
 
   function showTriggerMode(mode) {
@@ -2330,14 +2499,194 @@
     $('triggerBreathActions').classList.toggle('hidden', !breathing);
   }
 
+  // --- the page turning to ink and back ---
+  // A flat dark circle that opens from (or closes into) one spot, covering the
+  // change of screen underneath it. With Reduce Motion the screens simply swap.
+
+  var inkWipeState = null;
+
+  function cancelInkWipe() {
+    if (!inkWipeState) return;
+    var st = inkWipeState;
+    inkWipeState = null;
+    if (st.anim) st.anim.cancel();
+    st.node.remove();
+  }
+
+  function inkCircle(target) {
+    var rect = target ? target.getBoundingClientRect() : null;
+    var on = rect && rect.width > 0;
+    var x = on ? rect.left + rect.width / 2 : window.innerWidth / 2;
+    var y = on ? rect.top + rect.height / 2 : window.innerHeight / 2;
+    var dx = Math.max(x, window.innerWidth - x), dy = Math.max(y, window.innerHeight - y);
+    var max = Math.sqrt(dx * dx + dy * dy) + 12;
+    return {
+      shut: 'circle(0px at ' + x.toFixed(1) + 'px ' + y.toFixed(1) + 'px)',
+      open: 'circle(' + max.toFixed(1) + 'px at ' + x.toFixed(1) + 'px ' + y.toFixed(1) + 'px)'
+    };
+  }
+
+  // opening: the ink spreads from originEl, then swap() runs underneath it.
+  // closing: swap() runs first and returns the element the ink draws back into.
+  function inkWipe(opening, originEl, swap) {
+    cancelInkWipe();
+    var node = el('div', 'ink-wipe');
+    if (reduceMotion() || !node.animate) { swap(); return; }
+    var st = inkWipeState = { node: node, anim: null };
+    document.body.appendChild(node);
+    if (opening) {
+      var c = inkCircle(originEl);
+      node.style.clipPath = c.shut;
+      st.anim = node.animate([{ clipPath: c.shut }, { clipPath: c.open }], { duration: 620, easing: 'cubic-bezier(0.6, 0, 0.3, 1)', fill: 'forwards' });
+      st.anim.onfinish = function () {
+        if (inkWipeState !== st) return;
+        swap();
+        requestAnimationFrame(function () { if (inkWipeState === st) cancelInkWipe(); });
+      };
+    } else {
+      var c2 = inkCircle(swap());
+      if (inkWipeState !== st) return;
+      st.anim = node.animate([{ clipPath: c2.open }, { clipPath: c2.shut }], { duration: 560, easing: 'cubic-bezier(0.5, 0, 0.2, 1)', fill: 'forwards' });
+      st.anim.onfinish = function () { if (inkWipeState === st) cancelInkWipe(); };
+    }
+  }
+
+  // --- the ink ---
+  // Flat mustard ink on the dark page, drawn behind the words: a few nested washes
+  // with uneven, slowly shifting edges around a solid heart. It rests at the edge of
+  // the page while you read. When you breathe it moves under your thumb, spreads
+  // across the page as you breathe in, and draws back as you breathe out.
+
+  var INK_RGB = '232, 185, 35';
+  var INK_WASHES = [
+    { r0: 0.37, r1: 1.34, a: 0.045, wob: 0.07, pow: 0.72, seed: 0.0 },
+    { r0: 0.30, r1: 1.00, a: 0.055, wob: 0.085, pow: 0.92, seed: 1.0 },
+    { r0: 0.23, r1: 0.70, a: 0.075, wob: 0.10, pow: 1.2, seed: 2.0 },
+    { r0: 0.16, r1: 0.44, a: 0.10, wob: 0.11, pow: 1.55, seed: 3.0 }
+  ];
+  // [lobes around the edge, strength, drift]
+  var INK_HARMONICS = [[1, 0.5, 0.11], [2, 1.0, -0.17], [3, 0.8, 0.23], [4, 0.55, -0.29], [5, 0.45, 0.19], [7, 0.3, -0.37], [9, 0.2, 0.31], [13, 0.1, -0.43]];
+  var INK_POINTS = 72;
+  var ink = null;
+
+  function inkEdge(theta, t, seed) {
+    var n = 0;
+    for (var i = 0; i < INK_HARMONICS.length; i++) {
+      var h = INK_HARMONICS[i];
+      n += h[1] * Math.sin(h[0] * theta + i * 1.9 + seed * 0.55 * (1 + i * 0.3) + t * h[2] * 2.4);
+    }
+    return n / 1.9;
+  }
+
+  function inkBlob(c, cx, cy, radius, wobble, t, seed) {
+    var pts = [];
+    for (var i = 0; i < INK_POINTS; i++) {
+      var th = i / INK_POINTS * Math.PI * 2;
+      var r = radius * (1 + wobble * inkEdge(th, t, seed));
+      pts.push(cx + Math.cos(th) * r, cy + Math.sin(th) * r);
+    }
+    var len = pts.length;
+    c.beginPath();
+    c.moveTo((pts[len - 2] + pts[0]) / 2, (pts[len - 1] + pts[1]) / 2);
+    for (var k = 0; k < len; k += 2) {
+      var nx = pts[(k + 2) % len], ny = pts[(k + 3) % len];
+      c.quadraticCurveTo(pts[k], pts[k + 1], (pts[k] + nx) / 2, (pts[k + 1] + ny) / 2);
+    }
+    c.closePath();
+  }
+
+  function inkStart() {
+    inkStop();
+    var canvas = $('inkCanvas');
+    ink = { canvas: canvas, ctx: canvas.getContext('2d'), t: 0, rest: 0, blend: 0, appear: 0, last: 0, raf: 0, sig: '' };
+    inkResize();
+    ink.raf = requestAnimationFrame(inkFrame);
+  }
+
+  function inkStop() {
+    if (!ink) return;
+    cancelAnimationFrame(ink.raf);
+    ink.ctx.clearRect(0, 0, ink.w, ink.h);
+    ink = null;
+  }
+
+  function inkResize() {
+    if (!ink) return;
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    ink.w = window.innerWidth;
+    ink.h = window.innerHeight;
+    ink.canvas.width = Math.round(ink.w * dpr);
+    ink.canvas.height = Math.round(ink.h * dpr);
+    ink.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ink.sig = '';
+  }
+
+  function inkFrame(now) {
+    if (!ink) return;
+    var dt = ink.last ? Math.min(64, now - ink.last) : 16;
+    ink.last = now;
+    var still = reduceMotion();
+    var breathing = !!breath;
+    var goal = breathing ? 1 : 0;
+    if (still) {
+      ink.blend = goal;
+      ink.appear = 1;
+    } else {
+      ink.blend += (goal - ink.blend) * Math.min(1, dt / 280);
+      if (Math.abs(goal - ink.blend) < 0.0005) ink.blend = goal;
+      ink.appear = Math.min(1, ink.appear + dt / 1600);
+      // The edges only move while the ink is alive: resting, or held under your thumb.
+      if (!breathing) { ink.rest += dt / 1000; ink.t += dt / 2000; }
+      else if (breath.holding) ink.t += dt / 1000;
+    }
+    inkPaint(still);
+    ink.raf = requestAnimationFrame(inkFrame);
+  }
+
+  function inkPaint(still) {
+    var c = ink.ctx, w = ink.w, h = ink.h;
+    var U = Math.min(w, h, 520);
+    var e = breathEase(ink.blend);
+    var restX = w + U * 0.05, restY = h * 0.2;
+    var cx = restX, cy = restY;
+    var ring = $('breathRing').getBoundingClientRect();
+    if (ring.width) {
+      cx = restX + (ring.left + ring.width / 2 - restX) * e;
+      cy = restY + (ring.top + ring.height / 2 - restY) * e;
+    }
+    var restLevel = 0.1 + 0.04 * Math.sin(ink.rest * 0.63);   // one slow swell about every ten seconds
+    var level = restLevel + (breathLevel() - restLevel) * e;
+    var grow = still ? 1 : 1 - Math.pow(1 - ink.appear, 3);    // bleeds in when the screen opens
+    var sig = [Math.round(cx), Math.round(cy), level.toFixed(4), ink.t.toFixed(3), grow.toFixed(3), w, h].join(',');
+    if (sig === ink.sig) return;
+    ink.sig = sig;
+
+    c.clearRect(0, 0, w, h);
+    // With Reduce Motion nothing travels: the stain keeps its size and only deepens and fades.
+    var spread = still ? 0.42 : level;
+    var strength = still ? 0.4 + 0.6 * level : 1;
+    for (var i = 0; i < INK_WASHES.length; i++) {
+      var l = INK_WASHES[i];
+      var p = Math.pow(spread, l.pow);
+      c.fillStyle = 'rgba(' + INK_RGB + ', ' + (l.a * strength).toFixed(3) + ')';
+      inkBlob(c, cx, cy, U * (l.r0 + (l.r1 - l.r0) * p) * grow, l.wob * (0.7 + 0.6 * p), ink.t, l.seed);
+      c.fill();
+    }
+    c.fillStyle = 'rgb(' + INK_RGB + ')';
+    inkBlob(c, cx, cy, U * (0.07 + 0.05 * spread) * grow, 0.06, ink.t * 1.4, 5.0);
+    c.fill();
+  }
+
+  window.addEventListener('resize', inkResize);
+
   // --- hold-to-breathe: box breathing that only moves while your thumb is on the circle ---
   // 4s in, 4s hold, 4s out, 4s hold, four rounds. Letting go pauses it exactly where it is.
 
   var BREATH_PHASES = [
-    { label: 'Breathe in', from: 1, to: 2.3 },
-    { label: 'Hold', from: 2.3, to: 2.3 },
-    { label: 'Breathe out', from: 2.3, to: 1 },
-    { label: 'Hold', from: 1, to: 1 }
+    { label: 'Breathe in', from: 0, to: 1 },
+    { label: 'Hold', from: 1, to: 1 },
+    { label: 'Breathe out', from: 1, to: 0 },
+    { label: 'Hold', from: 0, to: 0 }
   ];
   var BREATH_ROUNDS = 4;
   var BREATH_PHASE_MS = 4000;
@@ -2356,44 +2705,79 @@
     cancelAnimationFrame(breath.raf);
     breath = null;
     $('breathRing').classList.remove('is-holding', 'is-done');
+    $('breathRounds').classList.remove('is-done');
+    $('breathPhase').classList.remove('is-changing');
+    $('breathPhase').textContent = 'Hold the circle';
+    $('breathCount').textContent = '';
     $('breathStopBtn').textContent = 'Stop';
     showTriggerMode('idea');
   }
 
   function breathEase(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
 
+  // How full the breath is right now: 0 empty, 1 full.
+  function breathLevel() {
+    if (!breath || breath.done) return 0;
+    var phase = BREATH_PHASES[Math.floor(breath.elapsed / BREATH_PHASE_MS) % BREATH_PHASES.length];
+    var within = (breath.elapsed % BREATH_PHASE_MS) / BREATH_PHASE_MS;
+    return phase.from + (phase.to - phase.from) * breathEase(within);
+  }
+
+  function setBreathPhase(text) {
+    var node = $('breathPhase');
+    if (node.textContent === text) return;
+    node.textContent = text;
+    node.classList.remove('is-changing');
+    void node.offsetWidth;
+    node.classList.add('is-changing');
+  }
+
+  // Four rounds, four strokes: each is drawn as its round goes by.
+  function paintBreathRounds(done) {
+    var rounds = $('breathRounds');
+    var roundMs = BREATH_PHASES.length * BREATH_PHASE_MS;
+    rounds.querySelectorAll('.breath-round').forEach(function (stroke, i) {
+      var f = Math.max(0, Math.min(1, (breath.elapsed - i * roundMs) / roundMs));
+      stroke.style.strokeDasharray = f.toFixed(4) + ' 2';
+      stroke.style.opacity = f > 0 ? 1 : 0;
+    });
+    rounds.classList.toggle('is-done', !!done);
+  }
+
   function paintBreath() {
     var ring = $('breathRing');
-    var core = ring.querySelector('.breath-core');
     var total = BREATH_PHASES.length * BREATH_ROUNDS * BREATH_PHASE_MS;
     if (breath.elapsed >= total) {
       breath.done = true;
       breath.holding = false;
       ring.classList.remove('is-holding');
       ring.classList.add('is-done');
-      core.style.transform = 'scale(1)';
-      $('breathPhase').textContent = 'Done';
-      $('breathCount').textContent = 'A minute, well spent.';
+      $('breathArc').style.strokeDasharray = '0 2';
+      paintBreathRounds(true);
+      setBreathPhase('Done');
+      $('breathCount').textContent = 'Four rounds done.';
       $('breathStopBtn').textContent = 'Back';
       return;
     }
     var idx = Math.floor(breath.elapsed / BREATH_PHASE_MS);
     var phase = BREATH_PHASES[idx % BREATH_PHASES.length];
     var within = (breath.elapsed % BREATH_PHASE_MS) / BREATH_PHASE_MS;
-    core.style.transform = 'scale(' + (phase.from + (phase.to - phase.from) * breathEase(within)) + ')';
+    // the ring is traced once per phase, so a hold has something to follow too
+    $('breathArc').style.strokeDasharray = within.toFixed(4) + ' 2';
+    paintBreathRounds(false);
     if (!breath.holding) {
-      $('breathPhase').textContent = breath.elapsed ? 'Paused' : 'Hold the circle';
-      $('breathCount').textContent = breath.elapsed ? 'Hold to keep going' : '';
+      setBreathPhase('Hold the circle');
       return;
     }
-    var round = Math.floor(idx / BREATH_PHASES.length) + 1;
-    $('breathPhase').textContent = phase.label;
-    $('breathCount').textContent = 'Round ' + round + ' of ' + BREATH_ROUNDS + ' · ' + Math.ceil((1 - within) * BREATH_PHASE_MS / 1000);
+    setBreathPhase(phase.label);
+    var spoken = 'Round ' + (Math.floor(idx / BREATH_PHASES.length) + 1) + ' of ' + BREATH_ROUNDS;
+    if ($('breathCount').textContent !== spoken) $('breathCount').textContent = spoken;
   }
 
   function breathTick(now) {
     if (!breath || !breath.holding) return;
-    breath.elapsed += Math.min(now - breath.last, 100);
+    // a frame can be stamped a hair before the touch that started it; never run backwards
+    breath.elapsed += Math.max(0, Math.min(now - breath.last, 100));
     breath.last = now;
     paintBreath();
     if (breath && breath.holding) breath.raf = requestAnimationFrame(breathTick);
@@ -2685,12 +3069,17 @@
     return pref === 'light' || pref === 'dark' ? pref : 'auto';
   }
 
+  function setThemeColor(color) {
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', color);
+  }
+
   function applyTheme() {
     var pref = themePref();
     var dark = pref === 'dark' || (pref === 'auto' && !!darkQuery && darkQuery.matches);
     document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
-    var meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', THEME_COLORS[dark ? 'dark' : 'light']);
+    // The triggered screen is dark in either appearance.
+    setThemeColor(THEME_COLORS[dark || state.screen === 'trigger' ? 'dark' : 'light']);
   }
 
   function setThemePref(pref) {
@@ -2738,7 +3127,7 @@
     } else if (state.screen === 'detail' && detailRefs) {
       var h = findHabit(detailRefs.habitId);
       if (h) {
-        paintDetailFigures(h);
+        paintDetailFigures(h, true);
         paintProgress(h, detailRefs.fill, detailRefs.nextLabel);
       }
     }
@@ -2747,6 +3136,13 @@
   }
 
   setInterval(tick, 15000);
+
+  // The clean-time ledger on a habit's page is kept to the second.
+  setInterval(function () {
+    if (!state.unlocked || state.screen !== 'detail' || !detailRefs) return;
+    var h = findHabit(detailRefs.habitId);
+    if (h) paintClock(h, true);
+  }, 1000);
 
   // ---------- wiring ----------
 
